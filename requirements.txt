@@ -1,0 +1,24 @@
+# AI
+anthropic
+
+# Financial data
+requests
+alpha-vantage
+
+# News & sentiment
+feedparser
+textblob
+nltk
+
+# Telegram alerts
+python-telegram-bot
+
+# Environment & config
+python-dotenv
+
+# Data handling
+pandas
+numpy
+
+# Scheduling
+schedule
