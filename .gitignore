@@ -1,3 +1,12 @@
+# Personal/sensitive files — never commit
+.env
+portfolio.local.py
+config.py
+design-prompts.md
+
+# Runtime data
+data/*.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
