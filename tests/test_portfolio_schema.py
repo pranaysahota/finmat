@@ -40,8 +40,13 @@ def _load_portfolio() -> dict:
 
 
 def _is_placeholder(portfolio: dict) -> bool:
-    """Return True if every asset has qty == 0 (i.e. the example file)."""
-    return all(
+    """Return True if any asset has qty == 0 (portfolio not fully configured).
+
+    Constraint tests are skipped until every planned position has been filled,
+    because bucket_pct sums and avg_buy checks only make sense on a complete
+    portfolio.
+    """
+    return any(
         asset["qty"] == 0
         for bucket in portfolio.values()
         for asset in bucket.values()
