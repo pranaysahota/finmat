@@ -253,7 +253,7 @@ class TestConfigSchema:
         # We can't fully import config.py as it calls load_dotenv and imports PORTFOLIO,
         # so we validate the RULES and BUCKET_TARGETS shapes via the portfolio fixture instead.
         # This test intentionally validates using known expected keys.
-        expected_rule_keys = {"stop_loss_pct", "take_profit_pct", "crypto_max_weight", "benchmark"}
+        expected_rule_keys = {"stop_loss_pct", "take_profit_pct", "crypto_max_weight", "bucket_drift_pct", "benchmark"}
         from config import RULES
         missing = expected_rule_keys - RULES.keys()
         assert not missing, f"RULES is missing keys: {missing}"

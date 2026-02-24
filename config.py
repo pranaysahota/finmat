@@ -41,6 +41,7 @@ RULES = {
     "stop_loss_pct":     -20,     # alert when any position is down ≥ 20%
     "take_profit_pct":    40,     # alert when any position is up ≥ 40%
     "crypto_max_weight":  20,     # alert when crypto exceeds 20% of total portfolio value
+    "bucket_drift_pct":    5,     # alert when any bucket drifts > 5pp from its target weight
     "benchmark":         "MSFT",  # largest position — use as internal performance anchor
 }
 
