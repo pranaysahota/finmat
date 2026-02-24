@@ -16,10 +16,10 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 
-REQUIRED_BUCKETS    = {"ETFs", "Stocks", "Crypto"}
+REQUIRED_BUCKETS    = {"Diversified", "Growth", "Crypto"}
 REQUIRED_ASSET_KEYS = {"type", "qty", "avg_buy", "allocation_usd", "bucket_pct"}
 VALID_TYPES         = {"stock", "crypto"}
-BUCKET_TYPE_MAP     = {"ETFs": "stock", "Stocks": "stock", "Crypto": "crypto"}
+BUCKET_TYPE_MAP     = {"Diversified": "stock", "Growth": "stock", "Crypto": "crypto"}
 
 
 def _load_module_from_file(name: str, path: Path):
@@ -135,16 +135,16 @@ class TestAssetTypes:
                 f"must be one of {VALID_TYPES}"
             )
 
-    def test_etf_bucket_assets_are_stock_type(self, portfolio):
-        for ticker, asset in portfolio["ETFs"].items():
+    def test_diversified_bucket_assets_are_stock_type(self, portfolio):
+        for ticker, asset in portfolio["Diversified"].items():
             assert asset["type"] == "stock", (
-                f"ETFs/{ticker}: type must be 'stock', got '{asset['type']}'"
+                f"Diversified/{ticker}: type must be 'stock', got '{asset['type']}'"
             )
 
-    def test_stocks_bucket_assets_are_stock_type(self, portfolio):
-        for ticker, asset in portfolio["Stocks"].items():
+    def test_growth_bucket_assets_are_stock_type(self, portfolio):
+        for ticker, asset in portfolio["Growth"].items():
             assert asset["type"] == "stock", (
-                f"Stocks/{ticker}: type must be 'stock', got '{asset['type']}'"
+                f"Growth/{ticker}: type must be 'stock', got '{asset['type']}'"
             )
 
     def test_crypto_bucket_assets_are_crypto_type(self, portfolio):
@@ -274,6 +274,7 @@ class TestConfigSchema:
         from config import PATHS
         assert "DATA_DIR" in PATHS
         assert "HISTORY_FILE" in PATHS
+        assert "TRADES_FILE" in PATHS
 
     def test_paths_are_pathlib_paths(self):
         from config import PATHS

@@ -1,7 +1,6 @@
 # Personal/sensitive files — never commit
 .env
 portfolio/local.py
-config.py
 design-prompts.md
 
 # Runtime data

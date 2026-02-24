@@ -4,10 +4,11 @@
 
 PORTFOLIO = {
 
-    # ── BUCKET 1: ETFs ───────────────────────────────────────
-    "ETFs": {
+    # ── BUCKET 1: Diversified ─────────────────────────────────
+    # Multi-sector stocks replacing ETFs (CGT 33% vs Irish exit tax 38%)
+    "Diversified": {
         "TICKER1": {
-            "type":           "stock",   # "stock" for equities/ETFs, "crypto" for coins
+            "type":           "stock",   # "stock" for equities, "crypto" for coins
             "qty":            0,         # number of shares held
             "avg_buy":        0.0,       # average purchase price per share (USD)
             "allocation_usd": 0,         # target dollar allocation for this asset
@@ -22,8 +23,9 @@ PORTFOLIO = {
         },
     },
 
-    # ── BUCKET 2: Stocks ─────────────────────────────────────
-    "Stocks": {
+    # ── BUCKET 2: Growth ─────────────────────────────────────
+    # Higher-risk AI and tech plays
+    "Growth": {
         "TICKER3": {
             "type":           "stock",
             "qty":            0,
