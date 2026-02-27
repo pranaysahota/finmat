@@ -97,11 +97,11 @@ class TestSendMessage:
             result = send_message("Hello")
         assert result is False
 
-    def test_parse_mode_is_markdown(self):
+    def test_parse_mode_is_html(self):
         with patch("modules.alerts.requests.post", return_value=_http_ok()) as mock_post:
             send_message("Hello")
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["parse_mode"] == "Markdown"
+        assert payload["parse_mode"] == "HTML"
 
     def test_text_included_in_payload(self):
         with patch("modules.alerts.requests.post", return_value=_http_ok()) as mock_post:

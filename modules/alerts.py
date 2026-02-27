@@ -1,5 +1,6 @@
 """Sends Telegram alerts for daily briefings, critical rule triggers, and portfolio events."""
 
+import html
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,13 +16,15 @@ TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
 
 def send_message(text: str) -> bool:
-    """Send a Markdown-formatted message to the configured Telegram chat.
+    """Send an HTML-formatted message to the configured Telegram chat.
 
     POSTs to the Telegram Bot API. Never raises an exception — any failure
     is printed and returns False so the caller can continue.
 
     Args:
-        text: Message text. Supports Telegram Markdown: *bold*, _italic_, `code`.
+        text: Message text. Supports Telegram HTML: <b>bold</b>, <i>italic</i>.
+              Any user-generated or AI-generated content must be html.escaped before
+              being embedded in the text.
 
     Returns:
         True if the message was delivered (HTTP 200), False otherwise.
@@ -30,7 +33,7 @@ def send_message(text: str) -> bool:
     payload = {
         "chat_id":    TELEGRAM_CHAT_ID,
         "text":       text,
-        "parse_mode": "Markdown",
+        "parse_mode": "HTML",
     }
     try:
         response = requests.post(url, json=payload, timeout=10)
@@ -76,31 +79,31 @@ def send_daily_briefing(
     crypto_weight = portfolio_state.get("crypto_weight", 0.0)
 
     lines: list[str] = [
-        f"{header_icon} *Finance Agent — Daily Briefing*",
-        f"_{now.strftime('%A, %d %B %Y  %H:%M')}_",
+        f"{header_icon} <b>Finance Agent — Daily Briefing</b>",
+        f"<i>{now.strftime('%A, %d %B %Y  %H:%M')}</i>",
         "",
-        f"*Portfolio Value:* ${total_value:,.2f}",
-        f"*Total P&L:* ${total_pnl_usd:+,.2f} ({total_pnl_pct:+.2f}%)",
-        f"*Crypto weight:* {crypto_weight:.1f}%",
+        f"<b>Portfolio Value:</b> ${total_value:,.2f}",
+        f"<b>Total P&L:</b> ${total_pnl_usd:+,.2f} ({total_pnl_pct:+.2f}%)",
+        f"<b>Crypto weight:</b> {crypto_weight:.1f}%",
         "",
-        "_Portfolio priced in USD — gains/losses in EUR will vary with exchange rate at time of disposal_",
+        "<i>Portfolio priced in USD — gains/losses in EUR will vary with exchange rate at time of disposal</i>",
         "",
         "---",
         "",
-        decision,
+        html.escape(decision),
     ]
 
     if triggered_rules:
         lines.append("")
-        lines.append("⚠️ *Rules Triggered:*")
+        lines.append("⚠️ <b>Rules Triggered:</b>")
         for alert in triggered_rules:
-            lines.append(alert.get("message", ""))
+            lines.append(html.escape(alert.get("message", "")))
 
     if bucket_drift:
         lines.append("")
-        lines.append("📐 *Bucket Drift:*")
+        lines.append("📐 <b>Bucket Drift:</b>")
         for alert in bucket_drift:
-            lines.append(alert.get("message", ""))
+            lines.append(html.escape(alert.get("message", "")))
 
     if performance:
         inception_pct = performance.get("since_inception_pct", 0.0)
@@ -123,7 +126,7 @@ def send_critical_alert(ticker: str, message: str) -> None:
         ticker:  The ticker symbol that triggered the alert e.g. "NVDA".
         message: The human-readable alert message from check_rules().
     """
-    text = f"🔴 *CRITICAL — {ticker}*\n\n{message}"
+    text = f"🔴 <b>CRITICAL — {html.escape(ticker)}</b>\n\n{html.escape(message)}"
     send_message(text)
 
 
@@ -144,9 +147,9 @@ def send_weekly_digest(performance: dict, portfolio_state: dict) -> None:
     total_value = portfolio_state.get("total_value", 0.0)
 
     lines: list[str] = [
-        f"📅 *Weekly Digest — {week_start} – {week_end}*",
+        f"📅 <b>Weekly Digest — {week_start} – {week_end}</b>",
         "",
-        f"*Portfolio value:* ${total_value:,.2f}",
+        f"<b>Portfolio value:</b> ${total_value:,.2f}",
     ]
 
     if performance:
@@ -157,15 +160,15 @@ def send_weekly_digest(performance: dict, portfolio_state: dict) -> None:
         worst          = performance.get("worst_performer")
 
         if seven_day_pct is not None:
-            lines.append(f"*This week:* {seven_day_pct:+.2f}%")
+            lines.append(f"<b>This week:</b> {seven_day_pct:+.2f}%")
 
         if best:
-            lines.append(f"*Best performer:*  {best['ticker']} ({best['pnl_pct']:+.2f}%)")
+            lines.append(f"<b>Best performer:</b>  {best['ticker']} ({best['pnl_pct']:+.2f}%)")
         if worst:
-            lines.append(f"*Worst performer:* {worst['ticker']} ({worst['pnl_pct']:+.2f}%)")
+            lines.append(f"<b>Worst performer:</b> {worst['ticker']} ({worst['pnl_pct']:+.2f}%)")
 
         lines.append(
-            f"*Total return since inception:* {inception_pct:+.2f}% (${inception_usd:+,.2f})"
+            f"<b>Total return since inception:</b> {inception_pct:+.2f}% (${inception_usd:+,.2f})"
         )
 
     lines.append("")

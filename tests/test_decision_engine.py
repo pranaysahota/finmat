@@ -218,13 +218,13 @@ class TestGetDecision:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "claude-sonnet-4-6"
 
-    def test_max_tokens_is_1000(self):
+    def test_max_tokens_is_1500(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
             get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["max_tokens"] == 1000
+        assert kwargs["max_tokens"] == 1500
 
     def test_system_prompt_contains_irish_tax(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:

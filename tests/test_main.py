@@ -4,8 +4,10 @@ All downstream modules are mocked; no real prices, API, or Telegram calls are ma
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -68,6 +70,7 @@ MOCK_DECISION = "MARKET MOOD: Bullish.\n\nPORTFOLIO STATUS: All good."
 def _patch_pipeline(**overrides):
     """Return a dict of attribute-name → mock for use with patch.multiple('main', ...)."""
     defaults = {
+        "is_market_open":          MagicMock(return_value=True),
         "get_all_prices":          MagicMock(return_value=MOCK_PRICES),
         "calculate_portfolio":     MagicMock(return_value=MOCK_STATE),
         "check_rules":             MagicMock(return_value=[]),
@@ -323,3 +326,66 @@ class TestRunWeeklyDigest:
             main.run_weekly_digest()
         mocks["get_all_sentiment"].assert_not_called()
         mocks["get_decision"].assert_not_called()
+
+
+# ── is_market_open ────────────────────────────────────────────
+
+
+class TestIsMarketOpen:
+    """is_market_open() gates on America/New_York weekday 09:30–16:00."""
+
+    def _et(self, weekday: int, hour: int, minute: int) -> datetime:
+        """Return a timezone-aware ET datetime. weekday: 0=Mon … 6=Sun.
+        Anchored to 2026-02-23 (a confirmed Monday).
+        """
+        from datetime import timedelta
+        base = datetime(2026, 2, 23, tzinfo=ZoneInfo("America/New_York"))
+        return base.replace(hour=hour, minute=minute, second=0, microsecond=0) + timedelta(days=weekday)
+
+    def test_true_during_market_hours_monday(self):
+        with patch("main._current_et_time", return_value=self._et(0, 10, 0)):
+            assert main.is_market_open() is True
+
+    def test_true_at_open_boundary(self):
+        """09:30 ET is exactly at open — should return True."""
+        with patch("main._current_et_time", return_value=self._et(0, 9, 30)):
+            assert main.is_market_open() is True
+
+    def test_false_one_minute_before_open(self):
+        with patch("main._current_et_time", return_value=self._et(0, 9, 29)):
+            assert main.is_market_open() is False
+
+    def test_false_at_close_boundary(self):
+        """16:00 ET is exactly at close — should return False."""
+        with patch("main._current_et_time", return_value=self._et(0, 16, 0)):
+            assert main.is_market_open() is False
+
+    def test_false_after_close(self):
+        with patch("main._current_et_time", return_value=self._et(0, 16, 1)):
+            assert main.is_market_open() is False
+
+    def test_true_on_friday_during_hours(self):
+        with patch("main._current_et_time", return_value=self._et(4, 14, 0)):
+            assert main.is_market_open() is True
+
+    def test_false_on_saturday(self):
+        with patch("main._current_et_time", return_value=self._et(5, 12, 0)):
+            assert main.is_market_open() is False
+
+    def test_false_on_sunday(self):
+        with patch("main._current_et_time", return_value=self._et(6, 12, 0)):
+            assert main.is_market_open() is False
+
+    def test_run_price_check_skips_pipeline_when_market_closed(self):
+        mocks = _patch_pipeline(**{"is_market_open": MagicMock(return_value=False)})
+        with patch.multiple("main", **mocks):
+            main.run_price_check()
+        mocks["get_all_prices"].assert_not_called()
+        mocks["calculate_portfolio"].assert_not_called()
+
+    def test_run_price_check_prints_market_closed_message(self, capsys):
+        fake_et = self._et(5, 14, 0)  # Saturday 14:00 ET
+        with patch("main._current_et_time", return_value=fake_et):
+            with patch("main.is_market_open", return_value=False):
+                main.run_price_check()
+        assert "Market closed" in capsys.readouterr().out

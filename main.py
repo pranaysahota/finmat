@@ -1,6 +1,7 @@
 """Entry point — wires all modules together, runs price checks and daily briefings on a schedule."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import schedule
 import time
@@ -30,6 +31,28 @@ from modules.portfolio import (
 from modules.price_fetcher import get_all_prices
 
 
+def _current_et_time() -> datetime:
+    """Return the current wall-clock time in America/New_York. Extracted for testability."""
+    return datetime.now(ZoneInfo("America/New_York"))
+
+
+def is_market_open() -> bool:
+    """Return True if the US stock market is currently open.
+
+    US market hours: Monday–Friday, 09:30–16:00 America/New_York.
+    Public holidays are not accounted for — keeps the logic simple.
+
+    Returns:
+        True if today is a weekday and current ET time is in [09:30, 16:00).
+    """
+    now_et = _current_et_time()
+    if now_et.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    market_open  = now_et.replace(hour=9,  minute=30, second=0, microsecond=0)
+    market_close = now_et.replace(hour=16, minute=0,  second=0, microsecond=0)
+    return market_open <= now_et < market_close
+
+
 def run_price_check() -> None:
     """Fast hourly pipeline: fetch prices → calculate portfolio → check rules.
 
@@ -38,6 +61,12 @@ def run_price_check() -> None:
     Always prints a timestamped one-liner to the terminal.
     """
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    if not is_market_open():
+        now_et = _current_et_time()
+        print(f"[{ts}] ⏸  Market closed — skipping price check ({now_et.strftime('%A %H:%M')} ET)")
+        return
+
     try:
         prices          = get_all_prices(PORTFOLIO)
         portfolio_state = calculate_portfolio(prices)

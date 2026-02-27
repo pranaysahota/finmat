@@ -51,20 +51,23 @@ counterbalancing before escalating to an action recommendation.
 
 Analyse the data and respond in exactly this format:
 
-MARKET MOOD: [one sentence]
+MARKET MOOD: [one sentence — max 20 words]
 
-PORTFOLIO STATUS: [2-3 sentences on overall health, referencing macro
-themes and which buckets are helping vs. hurting]
+PORTFOLIO STATUS: [2-3 sentences max — overall health, macro theme impact,
+which buckets are helping vs. hurting]
 
 ACTIONS REQUIRED:
-[bullet list of specific actions with CGT impact noted, or 'No action needed']
+[max 5 bullets — each bullet: one action + CGT note in 2 sentences max.
+Write 'No action needed' if nothing is required.]
 
 WATCH LIST:
-[2-3 things to monitor this week — prioritise any DOUBLE SIGNAL positions
-and macro themes affecting >50% of portfolio]
+[exactly 3 items — each item: ticker or theme name, one sentence on risk,
+one sentence on what to watch for. Prioritise DOUBLE SIGNAL positions.]
 
 Be specific. Reference actual tickers, P&L numbers, and macro themes.
-Always factor in Irish CGT before recommending any disposal. No fluff."""
+Always factor in Irish CGT before recommending any disposal. No fluff.
+Plain text only — no Markdown, no asterisks, no underscores used for
+formatting, no HTML tags."""
 
 _FALLBACK_DECISION = (
     "⚠️ Decision engine unavailable — Claude API error. "
@@ -271,7 +274,7 @@ def get_decision(
         client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model      = "claude-sonnet-4-6",
-            max_tokens = 1000,
+            max_tokens = 1500,
             system     = _SYSTEM_PROMPT,
             messages   = [{"role": "user", "content": context}],
         )

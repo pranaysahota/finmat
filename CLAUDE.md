@@ -261,7 +261,7 @@ kill the entire briefing pipeline.
 | Task | Model |
 |------|-------|
 | News sentiment scoring | `claude-haiku-4-5-20251001` — fast, cheap, runs per ticker |
-| Daily decision briefing | `claude-sonnet-4-6` — full reasoning, 1000 max tokens |
+| Daily decision briefing | `claude-sonnet-4-6` — full reasoning, 1500 max tokens |
 
 ---
 
