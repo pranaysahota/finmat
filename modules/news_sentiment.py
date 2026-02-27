@@ -44,15 +44,16 @@ def fetch_news(query: str, max_items: int = 5) -> list[str]:
         return []
 
 
-def score_sentiment(ticker: str, headlines: list[str]) -> dict:
-    """Score the sentiment of a set of headlines for a given ticker using Claude Haiku.
+def score_sentiment(label_for: str, headlines: list[str]) -> dict:
+    """Score the sentiment of a set of headlines for a given label using Claude Haiku.
 
     Sends the headlines to Claude Haiku with a structured prompt and parses the
     JSON response. Strips markdown code fences before parsing so the model's
     output format doesn't cause failures.
 
     Args:
-        ticker:    Ticker symbol or coin id (used in the prompt, e.g. "NVDA").
+        label_for: Ticker symbol or theme label used in the prompt (e.g. "NVDA",
+                   "AI_TECH_THEME"). Determines what the analysis is attributed to.
         headlines: List of headline strings to analyse. If empty, returns NEUTRAL.
 
     Returns:
@@ -67,7 +68,7 @@ def score_sentiment(ticker: str, headlines: list[str]) -> dict:
         return dict(_NEUTRAL)
 
     prompt = (
-        f"Analyse these recent news headlines for {ticker} and return ONLY valid JSON "
+        f"Analyse these recent news headlines for {label_for} and return ONLY valid JSON "
         f"with exactly these keys: score (float from -1.0 to 1.0), "
         f"label (one of: BEARISH, SLIGHTLY_BEARISH, NEUTRAL, SLIGHTLY_BULLISH, BULLISH), "
         f"summary (one sentence).\n\n"
@@ -137,6 +138,75 @@ def get_all_sentiment(tickers: list[str]) -> dict:
         sentiment = score_sentiment(ticker, headlines)
         results[ticker] = sentiment
         print(f"  📰 {ticker:<12} {sentiment['label']} ({sentiment['score']:+.2f})")
+
+    return results
+
+
+def get_macro_sentiment(portfolio_state: dict) -> dict:
+    """Fetch and score sentiment for cross-position macro themes based on portfolio composition.
+
+    Runs 4 fixed queries covering the thematic overlaps across all three buckets:
+    AI/Tech, Semiconductor, Defensive/Value, and Crypto. Each result includes
+    the sentiment scores plus the list of portfolio tickers affected by that theme.
+
+    Runs only during the daily briefing — not the hourly price check.
+
+    Args:
+        portfolio_state: Dict as returned by calculate_portfolio(). Used to signal
+                         which portfolio is being analysed (reserved for future
+                         dynamic theme generation).
+
+    Returns:
+        Dict keyed by theme label, each value containing score, label, summary,
+        and affected_tickers. Example:
+            {
+                "AI_TECH_THEME": {
+                    "score": 0.4, "label": "SLIGHTLY_BULLISH",
+                    "summary": "...", "affected_tickers": ["MSFT", "AAPL", ...]
+                },
+                ...
+            }
+        Returns empty dict on any error — never crashes the pipeline.
+    """
+    _THEMES = [
+        {
+            "query":             "AI technology stocks market outlook",
+            "label_for":         "AI_TECH_THEME",
+            "affected_tickers":  ["MSFT", "AAPL", "GOOG", "NVDA", "ASML"],
+        },
+        {
+            "query":             "semiconductor chip industry news",
+            "label_for":         "SEMICONDUCTOR_THEME",
+            "affected_tickers":  ["NVDA", "ASML"],
+        },
+        {
+            "query":             "financials energy healthcare stocks outlook",
+            "label_for":         "DEFENSIVE_THEME",
+            "affected_tickers":  ["JPM", "JNJ", "XOM", "BRK.B"],
+        },
+        {
+            "query":             "bitcoin ethereum crypto market sentiment",
+            "label_for":         "CRYPTO_THEME",
+            "affected_tickers":  ["bitcoin", "ethereum"],
+        },
+    ]
+
+    results: dict = {}
+    try:
+        for theme in _THEMES:
+            print(f"  🌐 {theme['label_for']:<25} fetching headlines…")
+            headlines = fetch_news(theme["query"])
+            sentiment = score_sentiment(theme["label_for"], headlines)
+            results[theme["label_for"]] = {
+                **sentiment,
+                "affected_tickers": theme["affected_tickers"],
+            }
+            print(
+                f"  🌐 {theme['label_for']:<25} "
+                f"{sentiment['label']} ({sentiment['score']:+.2f})"
+            )
+    except Exception:
+        return {}
 
     return results
 

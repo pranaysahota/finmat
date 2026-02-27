@@ -47,13 +47,15 @@ def send_daily_briefing(
     triggered_rules:  list,
     bucket_drift:     list,
     performance:      dict,
+    macro_sentiment:  dict | None = None,
 ) -> None:
     """Format and send the full daily portfolio briefing to Telegram.
 
     Uses 🚨 header if any rules are triggered, otherwise 📊.
     Includes portfolio value, P&L, crypto weight, EUR/USD note, the Claude
     decision text, triggered rules and drift alerts (if any), and the
-    inception performance footer.
+    inception performance footer. Macro theme sentiment is embedded in the
+    decision text by the decision engine.
 
     Args:
         portfolio_state: Dict as returned by calculate_portfolio().
@@ -61,6 +63,8 @@ def send_daily_briefing(
         triggered_rules: List of alert dicts from check_rules().
         bucket_drift:    List of drift alert dicts from check_bucket_drift().
         performance:     Dict from get_performance_summary(), or empty dict.
+        macro_sentiment: Dict of {theme: sentiment_dict} from get_macro_sentiment().
+                         Already incorporated into decision text; stored for reference.
     """
     now        = datetime.now()
     has_alerts = bool(triggered_rules)

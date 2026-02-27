@@ -29,7 +29,8 @@ def get_stock_price(ticker: str) -> float | None:
     Returns:
         Current market price rounded to 2 decimal places, or None on any error.
     """
-    url = YAHOO_URL.format(ticker=ticker)
+    yahoo_ticker = ticker.replace(".", "-")  # BRK.B → BRK-B (Yahoo Finance URL format)
+    url = YAHOO_URL.format(ticker=yahoo_ticker)
     for attempt in range(MAX_RETRIES + 1):
         try:
             response = requests.get(url, headers=HEADERS, timeout=10)

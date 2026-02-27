@@ -79,109 +79,109 @@ class TestBuildContext:
     """build_context formats portfolio data into a readable text block."""
 
     def test_returns_string(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert isinstance(ctx, str)
 
     def test_contains_portfolio_snapshot_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "PORTFOLIO SNAPSHOT" in ctx
 
     def test_total_value_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "8,200.00" in ctx
 
     def test_total_pnl_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "+200.00" in ctx
 
     def test_crypto_weight_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "14.8%" in ctx
 
     def test_contains_bucket_breakdown_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "BUCKET BREAKDOWN" in ctx
 
     def test_all_buckets_appear_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         for bucket in ("Diversified", "Growth", "Crypto"):
             assert bucket in ctx
 
     def test_contains_holdings_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "HOLDINGS" in ctx
 
     def test_all_holdings_tickers_appear(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         for ticker in ("MSFT", "NVDA"):
             assert ticker in ctx
 
     def test_contains_triggered_rules_section(self):
-        ctx = build_context(PORTFOLIO_STATE, TRIGGERED_RULES, [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, TRIGGERED_RULES, [], {}, {}, {})
         assert "TRIGGERED RULES" in ctx
 
     def test_triggered_rule_message_appears(self):
-        ctx = build_context(PORTFOLIO_STATE, TRIGGERED_RULES, [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, TRIGGERED_RULES, [], {}, {}, {})
         assert "take-profit" in ctx.lower() or "take_profit" in ctx.lower() or "HIGH" in ctx
 
     def test_no_triggered_rules_shows_none(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "None triggered" in ctx
 
     def test_contains_bucket_drift_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], BUCKET_DRIFT, {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], BUCKET_DRIFT, {}, {}, {})
         assert "BUCKET DRIFT" in ctx
 
     def test_no_drift_shows_within_targets(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "Within targets" in ctx
 
     def test_contains_sentiment_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], SENTIMENT, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, SENTIMENT, {})
         assert "SENTIMENT" in ctx
 
     def test_sentiment_labels_appear(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], SENTIMENT, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, SENTIMENT, {})
         assert "BULLISH" in ctx
 
     def test_sentiment_summaries_appear(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], SENTIMENT, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, SENTIMENT, {})
         assert "Azure growth" in ctx
 
     def test_empty_sentiment_shows_no_data(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "No sentiment data available" in ctx
 
     def test_contains_performance_section(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, PERFORMANCE)
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, PERFORMANCE)
         assert "PERFORMANCE HISTORY" in ctx
 
     def test_since_inception_pct_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, PERFORMANCE)
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, PERFORMANCE)
         assert "+2.50%" in ctx
 
     def test_last_7_days_pct_appears_when_available(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, PERFORMANCE)
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, PERFORMANCE)
         assert "Last 7 days" in ctx
         assert "+1.20%" in ctx
 
     def test_no_performance_shows_insufficient_history(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "Insufficient history" in ctx
 
     def test_best_worst_performers_appear(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, PERFORMANCE)
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, PERFORMANCE)
         assert "Best performer" in ctx
         assert "Worst performer" in ctx
 
     def test_7_days_none_shows_insufficient_data(self):
         perf_no_7day = dict(PERFORMANCE)
         perf_no_7day["last_7_days_pct"] = None
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, perf_no_7day)
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, perf_no_7day)
         assert "insufficient data" in ctx.lower()
 
     def test_holding_pnl_pct_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {})
+        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "+7.5%" in ctx
 
 
@@ -201,36 +201,36 @@ class TestGetDecision:
     def test_returns_string_on_success(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = _api_response(self.MOCK_BRIEFING)
-            result = get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            result = get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert isinstance(result, str)
 
     def test_returns_briefing_text(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = _api_response(self.MOCK_BRIEFING)
-            result = get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            result = get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "MARKET MOOD" in result
 
     def test_correct_model_used(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
-            get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "claude-sonnet-4-6"
 
-    def test_max_tokens_is_600(self):
+    def test_max_tokens_is_1000(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
-            get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["max_tokens"] == 600
+        assert kwargs["max_tokens"] == 1000
 
     def test_system_prompt_contains_irish_tax(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
-            get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
         assert "Irish" in kwargs["system"] or "Ireland" in kwargs["system"]
 
@@ -238,7 +238,7 @@ class TestGetDecision:
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
-            get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs    = mock_create.call_args.kwargs
         user_msg  = kwargs["messages"][0]["content"]
         # context should contain portfolio data
@@ -247,29 +247,29 @@ class TestGetDecision:
     def test_returns_fallback_on_api_exception(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.side_effect = Exception("API error")
-            result = get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            result = get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert result == _FALLBACK_DECISION
 
     def test_fallback_does_not_raise(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.side_effect = RuntimeError("timeout")
-            result = get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            result = get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert isinstance(result, str)
 
     def test_response_is_stripped(self):
         padded = "  \n" + self.MOCK_BRIEFING + "\n  "
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             MockClient.return_value.messages.create.return_value = _api_response(padded)
-            result = get_decision(PORTFOLIO_STATE, [], [], {}, {})
+            result = get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert not result.startswith(" ")
         assert not result.endswith(" ")
 
     def test_all_data_sections_flow_into_api_call(self):
-        """build_context is called with all five arguments — spot-check via triggered rules."""
+        """build_context is called with all six arguments — spot-check via triggered rules."""
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
-            get_decision(PORTFOLIO_STATE, TRIGGERED_RULES, BUCKET_DRIFT, SENTIMENT, PERFORMANCE)
+            get_decision(PORTFOLIO_STATE, TRIGGERED_RULES, BUCKET_DRIFT, {}, SENTIMENT, PERFORMANCE)
         kwargs   = mock_create.call_args.kwargs
         user_msg = kwargs["messages"][0]["content"]
         # Triggered rule and sentiment should appear in the context passed to Claude

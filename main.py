@@ -21,7 +21,7 @@ from modules.history import (
     load_history,
     save_snapshot,
 )
-from modules.news_sentiment import get_all_sentiment
+from modules.news_sentiment import get_all_sentiment, get_macro_sentiment
 from modules.portfolio import (
     calculate_portfolio,
     check_bucket_drift,
@@ -131,10 +131,21 @@ def run_daily_briefing() -> None:
         print(f"[{ts}] Sentiment FAILED: {exc}")
         sentiment = {}
 
+    # ── 6b. Macro sentiment (cross-position themes) ──
+    try:
+        print(f"[{ts}] Running macro sentiment (4 themes)…")
+        macro_sentiment = get_macro_sentiment(portfolio_state)
+    except Exception as exc:
+        print(f"[{ts}] Macro sentiment FAILED: {exc}")
+        macro_sentiment = {}
+
     # ── 7. Decision ──
     try:
         print(f"[{ts}] Generating decision…")
-        decision = get_decision(portfolio_state, triggered_rules, bucket_drift, sentiment, performance)
+        decision = get_decision(
+            portfolio_state, triggered_rules, bucket_drift,
+            macro_sentiment, sentiment, performance,
+        )
     except Exception as exc:
         print(f"[{ts}] Decision engine FAILED: {exc}")
         decision = "⚠️ Decision engine unavailable."
@@ -142,7 +153,10 @@ def run_daily_briefing() -> None:
     # ── 8. Send ──
     try:
         print(f"[{ts}] Sending daily briefing…")
-        send_daily_briefing(portfolio_state, decision, triggered_rules, bucket_drift, performance)
+        send_daily_briefing(
+            portfolio_state, decision, triggered_rules, bucket_drift,
+            performance, macro_sentiment,
+        )
     except Exception as exc:
         print(f"[{ts}] Send FAILED: {exc}")
 

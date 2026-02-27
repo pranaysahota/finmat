@@ -75,6 +75,7 @@ def _patch_pipeline(**overrides):
         "save_snapshot":           MagicMock(),
         "get_performance_summary": MagicMock(return_value=MOCK_PERFORMANCE),
         "get_all_sentiment":       MagicMock(return_value=MOCK_SENTIMENT),
+        "get_macro_sentiment":     MagicMock(return_value={}),
         "get_decision":            MagicMock(return_value=MOCK_DECISION),
         "send_daily_briefing":     MagicMock(),
         "send_critical_alert":     MagicMock(),

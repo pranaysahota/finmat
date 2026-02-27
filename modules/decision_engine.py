@@ -20,6 +20,13 @@ PORTFOLIO STRUCTURE:
 - 25% Growth (GOOG, NVDA) — high-conviction AI/tech plays
 - 15% Crypto (BTC, ETH)
 
+HEDGING CONTEXT:
+JPM, JNJ, XOM, and BRK.B are deliberate hedges against tech/AI weakness.
+When AI_TECH_THEME or SEMICONDUCTOR_THEME sentiment is bearish, check
+whether the defensive positions are offsetting the exposure before
+recommending action. A bearish AI theme does not automatically mean
+the portfolio is in trouble — it may mean the hedge is working.
+
 IRISH TAX CONTEXT — THIS IS CRITICAL:
 - All positions are subject to Irish CGT at 33% on actual disposal only.
 - ETFs are deliberately excluded — Irish exit tax (38%) + 8-year deemed
@@ -29,23 +36,35 @@ IRISH TAX CONTEXT — THIS IS CRITICAL:
 - The investor has a €1,270 annual CGT exemption — factor this in when
   suggesting any partial profit-taking.
 - Crypto-to-crypto swaps (e.g. BTC → ETH) are also taxable events.
+- Loss positions are valuable — selling a loss crystallises a CGT offset
+  against future gains. Factor this into stop-loss recommendations.
 - Benchmark: MSFT is the largest position and acts as the internal
   performance anchor — not an external index like VOO.
+
+USE THE MACRO THEMES:
+When a macro theme is bearish and affects multiple holdings, reason about
+the combined portfolio exposure — not just individual tickers. For example,
+if AI_TECH_THEME is BEARISH and affects 68% of the portfolio, that is more
+significant than any single ticker's individual sentiment score.
+Always check if defensive positions (JPM, JNJ, XOM, BRK.B) are
+counterbalancing before escalating to an action recommendation.
 
 Analyse the data and respond in exactly this format:
 
 MARKET MOOD: [one sentence]
 
-PORTFOLIO STATUS: [2-3 sentences on overall health and trend]
+PORTFOLIO STATUS: [2-3 sentences on overall health, referencing macro
+themes and which buckets are helping vs. hurting]
 
 ACTIONS REQUIRED:
-[bullet list of specific actions, or 'No action needed']
+[bullet list of specific actions with CGT impact noted, or 'No action needed']
 
 WATCH LIST:
-[2-3 things to monitor this week with brief reason]
+[2-3 things to monitor this week — prioritise any DOUBLE SIGNAL positions
+and macro themes affecting >50% of portfolio]
 
-Be specific. Reference actual tickers and numbers. No fluff.
-Always factor in Irish CGT before recommending any disposal."""
+Be specific. Reference actual tickers, P&L numbers, and macro themes.
+Always factor in Irish CGT before recommending any disposal. No fluff."""
 
 _FALLBACK_DECISION = (
     "⚠️ Decision engine unavailable — Claude API error. "
@@ -57,6 +76,7 @@ def build_context(
     portfolio_state:  dict,
     triggered_rules:  list,
     bucket_drift:     list,
+    macro_sentiment:  dict,
     sentiment:        dict,
     performance:      dict,
 ) -> str:
@@ -66,16 +86,19 @@ def build_context(
     system prompt can reason over. Sections included:
       - Portfolio Snapshot (totals and crypto weight)
       - Bucket Breakdown (current vs target per bucket)
-      - Holdings (ticker, price, P&L)
+      - Holdings (ticker, price, P&L, risk proximity flags)
       - Triggered Rules (alert list or 'None triggered')
       - Bucket Drift (drift alerts or 'Within targets')
-      - Sentiment (label + summary per ticker)
+      - Macro Themes (cross-position themes with portfolio weight affected)
+      - Sentiment (label + summary per ticker, with DOUBLE SIGNAL detection)
       - Performance History (since inception + 7-day if available)
 
     Args:
         portfolio_state: Dict as returned by calculate_portfolio().
         triggered_rules: List of alert dicts from check_rules().
         bucket_drift:    List of drift alert dicts from check_bucket_drift().
+        macro_sentiment: Dict of {theme: {score, label, summary, affected_tickers}}
+                         from get_macro_sentiment(). May be empty.
         sentiment:       Dict of {ticker: {score, label, summary}} from get_all_sentiment().
         performance:     Dict from get_performance_summary(), or empty dict.
 
@@ -105,14 +128,22 @@ def build_context(
         target = bucket_targets.get(bucket, 0)
         lines.append(f"  {bucket:<14} ${val:>10,.2f}  {actual:.1f}% (target {target}%)")
 
-    # ── Holdings ──
+    # ── Holdings (risk-annotated) ──
     lines.append("\nHOLDINGS")
     for ticker, data in portfolio_state.get("holdings", {}).items():
-        lines.append(
-            f"  {ticker:<10} price ${data.get('current_price', 0):>10,.2f}  "
-            f"value ${data.get('current_value', 0):>10,.2f}  "
-            f"P&L {data.get('pnl_pct', 0):+.1f}%"
+        pnl_pct = data.get("pnl_pct", 0.0)
+        pnl_usd = data.get("pnl_usd", 0.0)
+        bucket  = data.get("bucket", "")
+        price   = data.get("current_price", 0.0)
+        line = (
+            f"  {ticker:<8} | ${price:>10,.2f} | "
+            f"P&L: {pnl_pct:+.1f}% (${pnl_usd:+,.2f}) | {bucket}"
         )
+        if pnl_pct <= -12.0:
+            line += "  ⚠️ STOP-LOSS PROXIMITY"
+        elif pnl_pct >= 32.0:
+            line += "  🎯 TAKE-PROFIT PROXIMITY"
+        lines.append(line)
 
     # ── Triggered Rules ──
     lines.append("\nTRIGGERED RULES")
@@ -130,14 +161,50 @@ def build_context(
     else:
         lines.append("  Within targets")
 
-    # ── Sentiment ──
-    lines.append("\nSENTIMENT")
-    if sentiment:
-        for ticker, data in sentiment.items():
-            lines.append(
-                f"  {ticker:<10} [{data.get('label', 'NEUTRAL'):<18}]  "
-                f"{data.get('summary', '')}"
+    # ── Macro Themes (cross-position) ──
+    lines.append("\nMACRO THEMES (cross-position)")
+    if macro_sentiment:
+        total_value = portfolio_state.get("total_value", 0.0)
+        holdings    = portfolio_state.get("holdings", {})
+        for theme_label, theme_data in macro_sentiment.items():
+            affected  = theme_data.get("affected_tickers", [])
+            theme_val = sum(
+                holdings[t]["current_value"]
+                for t in affected
+                if t in holdings
             )
+            theme_weight = (theme_val / total_value * 100) if total_value else 0.0
+            lines.append(
+                f"  {theme_label}: {theme_data.get('label')} "
+                f"({theme_data.get('score', 0.0):+.2f}) — "
+                f"affects: {', '.join(affected)}"
+            )
+            lines.append(f"    Summary: {theme_data.get('summary', '')}")
+            lines.append(f"    {theme_label} affects {theme_weight:.0f}% of portfolio by value")
+    else:
+        lines.append("  No macro theme data available.")
+
+    # ── Sentiment (per ticker, with DOUBLE SIGNAL detection) ──
+    lines.append("\nSENTIMENT (per ticker)")
+    if sentiment:
+        # Build set of tickers that appear in any bearish macro theme
+        bearish_macro_tickers: set[str] = set()
+        for theme_data in macro_sentiment.values():
+            if theme_data.get("score", 0.0) < 0:
+                bearish_macro_tickers.update(theme_data.get("affected_tickers", []))
+
+        for ticker, data in sentiment.items():
+            ticker_score = data.get("score", 0.0)
+            lines.append(
+                f"  {ticker:<8} {data.get('label', 'NEUTRAL'):<18} "
+                f"({ticker_score:+.2f}) | "
+                f"current P&L: {portfolio_state.get('holdings', {}).get(ticker, {}).get('pnl_pct', 0.0):+.1f}%"
+            )
+            lines.append(f"    {data.get('summary', '')}")
+            if ticker in bearish_macro_tickers and ticker_score < 0:
+                lines.append(
+                    f"    🔴 DOUBLE SIGNAL: bearish on both ticker and macro theme"
+                )
     else:
         lines.append("  No sentiment data available")
 
@@ -175,6 +242,7 @@ def get_decision(
     portfolio_state:  dict,
     triggered_rules:  list,
     bucket_drift:     list,
+    macro_sentiment:  dict,
     sentiment:        dict,
     performance:      dict,
 ) -> str:
@@ -187,6 +255,7 @@ def get_decision(
         portfolio_state: Dict as returned by calculate_portfolio().
         triggered_rules: List of alert dicts from check_rules().
         bucket_drift:    List of drift alert dicts from check_bucket_drift().
+        macro_sentiment: Dict of {theme: sentiment_dict} from get_macro_sentiment().
         sentiment:       Dict of {ticker: sentiment_dict} from get_all_sentiment().
         performance:     Dict from get_performance_summary(), or empty dict.
 
@@ -195,14 +264,14 @@ def get_decision(
         Returns a clear fallback message on any API error so the pipeline continues.
     """
     context = build_context(
-        portfolio_state, triggered_rules, bucket_drift, sentiment, performance
+        portfolio_state, triggered_rules, bucket_drift, macro_sentiment, sentiment, performance
     )
 
     try:
         client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model      = "claude-sonnet-4-6",
-            max_tokens = 600,
+            max_tokens = 1000,
             system     = _SYSTEM_PROMPT,
             messages   = [{"role": "user", "content": context}],
         )
@@ -246,10 +315,27 @@ if __name__ == "__main__":
         "latest_date":         "2026-02-24",
     }
 
+    mock_macro_sentiment = {
+        "AI_TECH_THEME": {
+            "score": -0.3, "label": "SLIGHTLY_BEARISH",
+            "summary": "AI spending concerns weigh on big tech.",
+            "affected_tickers": ["MSFT", "AAPL", "GOOG", "NVDA", "ASML"],
+        },
+        "DEFENSIVE_THEME": {
+            "score": 0.2, "label": "SLIGHTLY_BULLISH",
+            "summary": "Financials and energy holding steady.",
+            "affected_tickers": ["JPM", "JNJ", "XOM", "BRK.B"],
+        },
+    }
+
     print("\n── Context block ──\n")
-    ctx = build_context(mock_portfolio_state, [], [], mock_sentiment, mock_performance)
+    ctx = build_context(
+        mock_portfolio_state, [], [], mock_macro_sentiment, mock_sentiment, mock_performance
+    )
     print(ctx)
 
     print("\n── Decision (live API) ──\n")
-    decision = get_decision(mock_portfolio_state, [], [], mock_sentiment, mock_performance)
+    decision = get_decision(
+        mock_portfolio_state, [], [], mock_macro_sentiment, mock_sentiment, mock_performance
+    )
     print(decision)

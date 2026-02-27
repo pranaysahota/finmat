@@ -99,6 +99,13 @@ class TestGetStockPrice:
         called_url = mock_get.call_args.args[0]
         assert "NVDA" in called_url
 
+    def test_dot_in_ticker_replaced_with_dash_in_url(self):
+        with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_SUCCESS)) as mock_get:
+            get_stock_price("BRK.B")
+        called_url = mock_get.call_args.args[0]
+        assert "BRK-B" in called_url
+        assert "BRK.B" not in called_url
+
     def test_user_agent_header_sent(self):
         with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_SUCCESS)) as mock_get:
             get_stock_price("MSFT")
