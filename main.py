@@ -162,7 +162,7 @@ def run_daily_briefing() -> None:
 
     # ── 6b. Macro sentiment (cross-position themes) ──
     try:
-        print(f"[{ts}] Running macro sentiment (4 themes)…")
+        print(f"[{ts}] Running macro sentiment…")
         macro_sentiment = get_macro_sentiment(portfolio_state)
     except Exception as exc:
         print(f"[{ts}] Macro sentiment FAILED: {exc}")

@@ -87,8 +87,9 @@ def get_all_prices(portfolio: dict) -> dict:
     """Fetch live prices for every asset in the portfolio.
 
     Iterates all buckets and assets, detects type ("stock" or "crypto"),
-    and calls the appropriate fetch function. Prices are fetched for all
-    tickers regardless of qty — planned positions (qty=0) still need a
+    and calls the appropriate fetch function. The Crypto bucket is skipped
+    entirely when CRYPTO_ACTIVE is False. For active buckets, prices are
+    fetched regardless of qty — planned positions (qty=0) still need a
     current price for display.
 
     Args:

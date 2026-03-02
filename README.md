@@ -99,7 +99,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - Receives the full context block: portfolio snapshot, bucket breakdown, holdings with risk flags, triggered rules, macro themes with portfolio weight affected, per-ticker sentiment, and performance history
 - System prompt is explicitly aware of the **hedging rationale** — JPM, JNJ, XOM, BRK.B are deliberate hedges against tech/AI weakness. A bearish AI theme does not automatically warrant action if the defensive positions are offsetting
 - All recommendations are **Irish CGT-aware**: 33% CGT on disposal, €1,270 annual exemption, no ETF rebalancing advice, crypto swap tax treatment
-- Response is structured: MARKET MOOD → PORTFOLIO STATUS → ACTIONS REQUIRED → WATCH LIST
+- Response is structured: MARKET MOOD → PORTFOLIO STATUS → WATCH LIST. When a CRITICAL or HIGH alert triggers, a CGT IMPACT section is appended with the Irish tax calculation for each flagged position
 
 ### Performance History
 - **Append-only** daily snapshots in `data/portfolio_history.json` — never overwritten
