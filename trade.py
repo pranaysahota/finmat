@@ -195,12 +195,139 @@ def _append_trade(trade: dict) -> None:
     TRADES_FILE.write_text(json.dumps(history, indent=2))
 
 
+# ── CGT calculation ────────────────────────────────────────────────
+
+def _calc_cgt(gross_gain: float) -> float:
+    """Calculate CGT owed under Irish law (33% on gain above €1,270 annual exemption).
+
+    Simplified: applies the full annual exemption to this disposal.
+    Caller should note that the exemption may already be partially used.
+    Returns 0.0 for a loss or a gain within the exemption.
+    """
+    return round(max(0.0, gross_gain - 1270) * 0.33, 2)
+
+
+# ── Sell flow ──────────────────────────────────────────────────────
+
+def _run_sell(portfolio: dict) -> None:
+    """Interactive sell flow: validate ticker, display CGT estimate, update portfolio."""
+
+    # ── Step 1: ticker ───────────────────────────────────────────
+    raw = input("  Ticker to sell: ").strip()
+    if not raw:
+        print("  ❌ Ticker cannot be empty.")
+        sys.exit(1)
+
+    bucket, asset = _find_ticker(portfolio, raw.upper())
+    if asset is None:
+        bucket, asset = _find_ticker(portfolio, raw.lower())
+
+    asset_type = asset["type"] if asset else None
+    ticker     = _normalise_ticker(raw, asset_type or "stock")
+
+    if asset is None:
+        bucket, asset = _find_ticker(portfolio, ticker)
+
+    if asset is None or asset["qty"] == 0:
+        print(f"  ❌ {ticker} not found in portfolio or qty is zero.")
+        sys.exit(1)
+
+    current_qty = asset["qty"]
+    avg_buy     = asset["avg_buy"]
+    asset_type  = asset["type"]
+
+    # ── Step 2: quantity and price ───────────────────────────────
+    qty_sold = _get_float("  Quantity sold:    > ")
+    if qty_sold > current_qty:
+        print(f"  ❌ You hold {current_qty} shares. Cannot sell {qty_sold}.")
+        sys.exit(1)
+
+    price = _get_float("  Price per share:  > ")
+
+    # ── Step 3: CGT calculation ──────────────────────────────────
+    total_cost         = round(avg_buy * qty_sold, 2)
+    total_proceeds     = round(price * qty_sold, 2)
+    gross_gain_or_loss = round(total_proceeds - total_cost, 2)
+    cgt_owed           = _calc_cgt(gross_gain_or_loss)
+    remaining_qty      = round(current_qty - qty_sold, 8)
+
+    if gross_gain_or_loss > 0:
+        cgt_detail = f"    CGT owed*:        ${cgt_owed:.2f}"
+    else:
+        cgt_detail = (
+            f"    Loss banked*:     ${abs(gross_gain_or_loss):.2f}"
+            f" offsettable against future gains"
+        )
+
+    print(f"""
+  ────────────────────────────────
+  SELL SUMMARY — {ticker}
+  ────────────────────────────────
+  Shares sold:        {qty_sold} @ ${price:,.2f}
+  Proceeds:           ${total_proceeds:,.2f}
+  Cost basis:         ${total_cost:,.2f} (avg_buy: ${avg_buy:,.2f})
+  Gross gain/loss:    ${gross_gain_or_loss:,.2f}
+
+  CGT ESTIMATE (Irish, 33%):
+    Result:           {"GAIN" if gross_gain_or_loss > 0 else "LOSS"}
+{cgt_detail}
+  * Assumes full €1,270 annual exemption unused. Verify with your tax records.
+
+  Remaining position: {remaining_qty} shares
+  ────────────────────────────────""")
+
+    confirm = input("  Confirm sell? (y/n): ").strip().lower()
+    if confirm != "y":
+        print("  Aborted — no changes made.")
+        sys.exit(0)
+
+    # ── Step 4: update portfolio and log trade ───────────────────
+    new_avg_buy = 0.0 if remaining_qty == 0.0 else avg_buy
+    _update_existing_ticker(ticker, remaining_qty, new_avg_buy)
+
+    sell_trade = {
+        "id":             str(uuid.uuid4()),
+        "timestamp":      datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+        "side":           "sell",
+        "ticker":         ticker,
+        "bucket":         bucket,
+        "type":           asset_type,
+        "qty_sold":       qty_sold,
+        "price_received": price,
+        "total_proceeds": total_proceeds,
+        "cost_basis":     total_cost,
+        "gross_pnl":      gross_gain_or_loss,
+        "cgt_estimate":   cgt_owed,
+        "remaining_qty":  remaining_qty,
+        "source":         "Revolut",
+    }
+    _append_trade(sell_trade)
+
+    print(f"  ✅ Sell logged. Remaining {ticker} position: {remaining_qty} shares.")
+    print(
+        "  📋 Remember to file CGT with Revenue by 15 Dec "
+        "(or 31 Jan for December disposals)."
+    )
+
+
 # ── Main flow ──────────────────────────────────────────────────────
 
 def main() -> None:
     print("\n📈 Finance Agent — Log a Trade\n")
 
+    print("  Trade type:")
+    print("  [1] Buy")
+    print("  [2] Sell")
+    side = input("  > ").strip()
+    if side not in ("1", "2"):
+        print("  ❌ Invalid choice. Enter 1 or 2.")
+        sys.exit(1)
+
     portfolio = _load_portfolio()
+
+    if side == "2":
+        _run_sell(portfolio)
+        return
 
     # ── Step 1: ticker ───────────────────────────────────────────
     raw = input("  Ticker / coin (e.g. NVDA, VOO, bitcoin): ").strip()

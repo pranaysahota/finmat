@@ -17,6 +17,7 @@ import trade  # noqa: E402  (after sys.path setup)
 from trade import (  # noqa: E402
     _add_new_ticker,
     _append_trade,
+    _calc_cgt,
     _find_field_node,
     _find_ticker,
     _normalise_ticker,
@@ -344,6 +345,84 @@ class TestAppendTrade:
         _append_trade(self.SAMPLE_TRADE)   # must not raise
         data = json.loads((tmp_path / "trades.json").read_text())
         assert len(data) == 1             # fresh list with only this trade
+
+
+# ── Weighted average calculation ──────────────────────────────
+
+# ── _calc_cgt ─────────────────────────────────────────────────
+
+class TestCalcCGT:
+    """CGT calculation: 33% on gain above €1,270 annual exemption."""
+
+    def test_gain_below_exemption_returns_zero(self):
+        # 10 shares @ $200, avg_buy $150 → gross $500 → within €1,270
+        assert _calc_cgt(500.0) == 0.0
+
+    def test_gain_above_exemption(self):
+        # 10 shares @ $300, avg_buy $150 → gross $1,500
+        # CGT = ($1,500 - $1,270) × 0.33 = $75.90
+        assert _calc_cgt(1500.0) == 75.9
+
+    def test_loss_returns_zero(self):
+        assert _calc_cgt(-500.0) == 0.0
+
+    def test_gain_exactly_at_exemption_returns_zero(self):
+        assert _calc_cgt(1270.0) == 0.0
+
+    def test_large_gain(self):
+        # $10,000 gain → CGT = ($10,000 - $1,270) × 0.33 = $2,880.90
+        assert _calc_cgt(10000.0) == round((10000 - 1270) * 0.33, 2)
+
+
+# ── Sell trade record ─────────────────────────────────────────
+
+class TestSellTradeRecord:
+    """sell trade entry stored in trades.json has all required fields."""
+
+    SELL_TRADE = {
+        "id":             "test-sell-uuid",
+        "timestamp":      "2026-03-02T10:00:00",
+        "side":           "sell",
+        "ticker":         "MSFT",
+        "bucket":         "Diversified",
+        "type":           "stock",
+        "qty_sold":       2.0,
+        "price_received": 400.00,
+        "total_proceeds": 800.00,
+        "cost_basis":     772.00,
+        "gross_pnl":      28.00,
+        "cgt_estimate":   0.0,
+        "remaining_qty":  1.1,
+        "source":         "Revolut",
+    }
+
+    @pytest.fixture(autouse=True)
+    def patch_trade_paths(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(trade, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(trade, "TRADES_FILE", tmp_path / "trades.json")
+
+    def test_sell_trade_has_side_sell(self, tmp_path):
+        _append_trade(self.SELL_TRADE)
+        data = json.loads((tmp_path / "trades.json").read_text())
+        assert data[0]["side"] == "sell"
+
+    def test_sell_trade_has_all_required_fields(self, tmp_path):
+        _append_trade(self.SELL_TRADE)
+        record = json.loads((tmp_path / "trades.json").read_text())[0]
+        for field in (
+            "id", "timestamp", "side", "ticker", "bucket", "type",
+            "qty_sold", "price_received", "total_proceeds",
+            "cost_basis", "gross_pnl", "cgt_estimate", "remaining_qty", "source",
+        ):
+            assert field in record, f"Missing field: {field}"
+
+    def test_sell_trade_values_correct(self, tmp_path):
+        _append_trade(self.SELL_TRADE)
+        record = json.loads((tmp_path / "trades.json").read_text())[0]
+        assert record["gross_pnl"] == 28.00
+        assert record["cgt_estimate"] == 0.0
+        assert record["remaining_qty"] == 1.1
+        assert record["source"] == "Revolut"
 
 
 # ── Weighted average calculation ──────────────────────────────

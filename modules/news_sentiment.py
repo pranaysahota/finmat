@@ -1,47 +1,57 @@
-"""Fetches financial news headlines via Google News RSS and scores sentiment using Claude."""
+"""Fetches financial news headlines from multiple RSS sources and scores sentiment using Claude."""
 
 import json
 import sys
 from pathlib import Path
-from urllib.parse import quote_plus
 
 import feedparser
 
 # Allow direct invocation (python modules/news_sentiment.py) as well as import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import ANTHROPIC_API_KEY
+from config import ANTHROPIC_API_KEY, CRYPTO_ACTIVE, NEWS_SOURCES
 
 import anthropic
-
-GOOGLE_NEWS_RSS = (
-    "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
-)
 
 _NEUTRAL = {"score": 0.0, "label": "NEUTRAL", "summary": "No news found."}
 
 
-def fetch_news(query: str, max_items: int = 5) -> list[str]:
-    """Fetch recent headline titles from Google News RSS for a given query.
+def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
+    """Fetch and aggregate headlines from a list of RSS feed URLs.
 
-    Uses feedparser to parse the Google News RSS feed — no API key required.
-    Returns only the plain title strings so that score_sentiment has clean input.
+    Fetches each URL with feedparser, collects up to max_items headlines per
+    feed, deduplicates across all feeds (exact string match), and returns up
+    to max_items total headlines in the order they were collected.
 
     Args:
-        query:     Search query string e.g. "MSFT stock news".
-        max_items: Maximum number of headlines to return (default 5).
+        urls:      List of RSS feed URLs to fetch from.
+        max_items: Maximum headlines to collect from each feed and to return
+                   in total (default 5).
 
     Returns:
-        List of headline title strings, up to max_items.
-        Empty list on any network or parse error.
+        Deduplicated list of headline title strings, up to max_items.
+        Empty list if all feeds fail or return no items.
     """
-    try:
-        url  = GOOGLE_NEWS_RSS.format(query=quote_plus(query))
-        feed = feedparser.parse(url)
-        return [entry.title for entry in feed.entries[:max_items]]
-    except Exception:
-        # Any error (network, parse, attribute) → return empty list silently
-        return []
+    seen:      set[str]  = set()
+    headlines: list[str] = []
+
+    for url in urls:
+        try:
+            feed  = feedparser.parse(url)
+            items = [entry.title for entry in feed.entries[:max_items]]
+        except Exception:
+            continue  # dead feed — skip silently
+
+        if not items:
+            print(f"  ⚠️  No items from {url} — skipping")
+            continue
+
+        for title in items:
+            if title not in seen:
+                seen.add(title)
+                headlines.append(title)
+
+    return headlines[:max_items]
 
 
 def score_sentiment(label_for: str, headlines: list[str]) -> dict:
@@ -111,30 +121,26 @@ def score_sentiment(label_for: str, headlines: list[str]) -> dict:
 def get_all_sentiment(tickers: list[str]) -> dict:
     """Fetch headlines and score sentiment for a list of stock tickers.
 
-    Crypto tickers are identified by known coin IDs (lowercase). Stocks use
-    "{ticker} stock news" as the query; crypto uses "{ticker} cryptocurrency news".
-
-    Sentiment is only called during the daily briefing — not the hourly price check.
-    Per CLAUDE.md: do NOT run sentiment on crypto tickers.
+    Uses NEWS_SOURCES["ticker_specific"] URL templates, fetching from multiple
+    sources per ticker and deduplicating headlines before scoring. Crypto
+    tickers are skipped — per design, sentiment runs on stocks only.
 
     Args:
-        tickers: List of ticker symbols or coin ids to analyse.
-                 Only stock tickers should be passed (crypto excluded per design).
+        tickers: List of ticker symbols to analyse. Crypto tickers are ignored.
 
     Returns:
-        Dict of {ticker: sentiment_dict} for every ticker in the list.
+        Dict of {ticker: sentiment_dict} for every stock ticker in the list.
         Each sentiment_dict has keys: score, label, summary.
     """
-    results: dict = {}
+    results:   dict      = {}
+    _CRYPTO_IDS          = {"bitcoin", "ethereum", "btc", "eth"}
+    stock_tickers        = [t for t in tickers if t.lower() not in _CRYPTO_IDS]
+    total                = len(stock_tickers)
 
-    _CRYPTO_IDS = {"bitcoin", "ethereum", "btc", "eth"}
-
-    for ticker in tickers:
-        is_crypto = ticker.lower() in _CRYPTO_IDS
-        query     = f"{ticker} cryptocurrency news" if is_crypto else f"{ticker} stock news"
-
-        print(f"  📰 {ticker:<12} fetching headlines…")
-        headlines = fetch_news(query)
+    for n, ticker in enumerate(stock_tickers, 1):
+        urls      = [tmpl.format(ticker=ticker) for tmpl in NEWS_SOURCES["ticker_specific"]]
+        print(f"  📰 Fetching sentiment: {ticker} ({n} of {total})")
+        headlines = fetch_news(urls, max_items=5)
         sentiment = score_sentiment(ticker, headlines)
         results[ticker] = sentiment
         print(f"  📰 {ticker:<12} {sentiment['label']} ({sentiment['score']:+.2f})")
@@ -143,59 +149,59 @@ def get_all_sentiment(tickers: list[str]) -> dict:
 
 
 def get_macro_sentiment(portfolio_state: dict) -> dict:
-    """Fetch and score sentiment for cross-position macro themes based on portfolio composition.
+    """Fetch and score sentiment for cross-position macro themes.
 
-    Runs 4 fixed queries covering the thematic overlaps across all three buckets:
-    AI/Tech, Semiconductor, Defensive/Value, and Crypto. Each result includes
-    the sentiment scores plus the list of portfolio tickers affected by that theme.
-
-    Runs only during the daily briefing — not the hourly price check.
+    Builds URL lists from the NEWS_SOURCES registry for each theme.
+    CRYPTO_THEME is only included when CRYPTO_ACTIVE is True.
+    Each theme fetches max_items=8 headlines for broader reasoning coverage.
 
     Args:
-        portfolio_state: Dict as returned by calculate_portfolio(). Used to signal
-                         which portfolio is being analysed (reserved for future
-                         dynamic theme generation).
+        portfolio_state: Dict as returned by calculate_portfolio(). Reserved for
+                         future dynamic theme generation.
 
     Returns:
         Dict keyed by theme label, each value containing score, label, summary,
-        and affected_tickers. Example:
-            {
-                "AI_TECH_THEME": {
-                    "score": 0.4, "label": "SLIGHTLY_BULLISH",
-                    "summary": "...", "affected_tickers": ["MSFT", "AAPL", ...]
-                },
-                ...
-            }
-        Returns empty dict on any error — never crashes the pipeline.
+        and affected_tickers. Returns empty dict on any error.
     """
     _THEMES = [
         {
-            "query":             "AI technology stocks market outlook",
-            "label_for":         "AI_TECH_THEME",
-            "affected_tickers":  ["MSFT", "AAPL", "GOOG", "NVDA", "ASML"],
+            "urls": NEWS_SOURCES["market_general"] + [
+                "https://news.google.com/rss/search?q=AI+technology+stocks+outlook"
+                "&hl=en-US&gl=US&ceid=US:en",
+            ],
+            "label_for":        "AI_TECH_THEME",
+            "affected_tickers": ["MSFT", "AAPL", "GOOG", "NVDA", "ASML"],
         },
         {
-            "query":             "semiconductor chip industry news",
-            "label_for":         "SEMICONDUCTOR_THEME",
-            "affected_tickers":  ["NVDA", "ASML"],
+            "urls": NEWS_SOURCES["european_and_sector"] + [
+                "https://news.google.com/rss/search?q=semiconductor+chip+industry"
+                "&hl=en-US&gl=US&ceid=US:en",
+            ],
+            "label_for":        "SEMICONDUCTOR_THEME",
+            "affected_tickers": ["NVDA", "ASML"],
         },
         {
-            "query":             "financials energy healthcare stocks outlook",
-            "label_for":         "DEFENSIVE_THEME",
-            "affected_tickers":  ["JPM", "JNJ", "XOM", "BRK.B"],
-        },
-        {
-            "query":             "bitcoin ethereum crypto market sentiment",
-            "label_for":         "CRYPTO_THEME",
-            "affected_tickers":  ["bitcoin", "ethereum"],
+            "urls": NEWS_SOURCES["market_general"] + [
+                "https://news.google.com/rss/search?q=financials+energy+healthcare+stocks"
+                "&hl=en-US&gl=US&ceid=US:en",
+            ],
+            "label_for":        "DEFENSIVE_THEME",
+            "affected_tickers": ["JPM", "JNJ", "XOM", "BRK.B"],
         },
     ]
+
+    if CRYPTO_ACTIVE:
+        _THEMES.append({
+            "urls":             NEWS_SOURCES["crypto"],
+            "label_for":        "CRYPTO_THEME",
+            "affected_tickers": ["bitcoin", "ethereum"],
+        })
 
     results: dict = {}
     try:
         for theme in _THEMES:
             print(f"  🌐 {theme['label_for']:<25} fetching headlines…")
-            headlines = fetch_news(theme["query"])
+            headlines = fetch_news(theme["urls"], max_items=8)
             sentiment = score_sentiment(theme["label_for"], headlines)
             results[theme["label_for"]] = {
                 **sentiment,
