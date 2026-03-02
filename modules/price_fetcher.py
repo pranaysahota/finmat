@@ -9,6 +9,8 @@ import requests
 # Allow direct invocation (python modules/price_fetcher.py) as well as import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from config import CRYPTO_ACTIVE
+
 YAHOO_URL    = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 COINGECKO_URL = "https://api.coingecko.com/api/v3/simple/price"
 HEADERS      = {"User-Agent": "Mozilla/5.0"}
@@ -29,7 +31,8 @@ def get_stock_price(ticker: str) -> float | None:
     Returns:
         Current market price rounded to 2 decimal places, or None on any error.
     """
-    url = YAHOO_URL.format(ticker=ticker)
+    yahoo_ticker = ticker.replace(".", "-")  # BRK.B → BRK-B (Yahoo Finance URL format)
+    url = YAHOO_URL.format(ticker=yahoo_ticker)
     for attempt in range(MAX_RETRIES + 1):
         try:
             response = requests.get(url, headers=HEADERS, timeout=10)
@@ -99,6 +102,8 @@ def get_all_prices(portfolio: dict) -> dict:
     prices: dict = {}
 
     for bucket, holdings in portfolio.items():
+        if bucket == "Crypto" and not CRYPTO_ACTIVE:
+            continue
         for symbol, asset in holdings.items():
             asset_type = asset.get("type")
 

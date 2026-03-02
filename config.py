@@ -35,6 +35,12 @@ BUCKET_TARGETS = {
     "Crypto":      15,   # 15% — BTC + ETH
 }
 
+# ── Crypto Activation ────────────────────────────────────────
+# Set to True when the first crypto purchase is made via trade.py.
+# When False, the Crypto bucket is excluded from all calculations and
+# price fetches — drift targets are recalculated across Diversified + Growth only.
+CRYPTO_ACTIVE = False
+
 # ── Risk Rules ───────────────────────────────────────────────
 # Thresholds that trigger alerts when breached
 RULES = {
@@ -72,11 +78,12 @@ except ModuleNotFoundError:
 # USAGE — what each module imports from this file
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # modules/price_fetcher.py    → PORTFOLIO
-# modules/portfolio.py        → PORTFOLIO, RULES, BUCKET_TARGETS
+# modules/portfolio.py        → PORTFOLIO, RULES, BUCKET_TARGETS, CRYPTO_ACTIVE
 # modules/news_sentiment.py   → ANTHROPIC_API_KEY
 # modules/decision_engine.py  → ANTHROPIC_API_KEY, RULES
 # modules/alerts.py           → TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 # modules/history.py          → PATHS
 # trade.py                    → PATHS
+# modules/price_fetcher.py    → CRYPTO_ACTIVE
 # main.py                     → PORTFOLIO, RULES, PATHS, DAILY_BRIEFING_TIME, PRICE_CHECK_INTERVAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

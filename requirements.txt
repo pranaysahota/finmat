@@ -9,4 +9,5 @@ textblob
 nltk
 python-telegram-bot
 alpha-vantage
+tzdata
 pytest

@@ -63,9 +63,11 @@ MOCK_TARGETS = {"Diversified": 60, "Growth": 25, "Crypto": 15}
 
 @pytest.fixture(autouse=True)
 def patch_module_globals(monkeypatch):
-    monkeypatch.setattr(portfolio_mod, "PORTFOLIO",      MOCK_PORTFOLIO)
-    monkeypatch.setattr(portfolio_mod, "RULES",          MOCK_RULES)
-    monkeypatch.setattr(portfolio_mod, "BUCKET_TARGETS", MOCK_TARGETS)
+    monkeypatch.setattr(portfolio_mod, "PORTFOLIO",               MOCK_PORTFOLIO)
+    monkeypatch.setattr(portfolio_mod, "RULES",                   MOCK_RULES)
+    monkeypatch.setattr(portfolio_mod, "BUCKET_TARGETS",          MOCK_TARGETS)
+    monkeypatch.setattr(portfolio_mod, "CRYPTO_ACTIVE",           True)
+    monkeypatch.setattr(portfolio_mod, "_crypto_warning_printed", False)
 
 
 # ── calculate_portfolio ───────────────────────────────────────
@@ -415,3 +417,77 @@ class TestCheckBucketDrift:
         # Drift of 10pp — below new threshold of 15, so no alert
         state = self._state({"Diversified": 50.0, "Growth": 35.0, "Crypto": 15.0})
         assert check_bucket_drift(state) == []
+
+
+# ── CRYPTO_ACTIVE = False ─────────────────────────────────────
+
+
+class TestCryptoInactive:
+    """Tests for CRYPTO_ACTIVE = False — crypto bucket excluded from all calculations."""
+
+    @pytest.fixture(autouse=True)
+    def set_crypto_inactive(self, monkeypatch):
+        monkeypatch.setattr(portfolio_mod, "CRYPTO_ACTIVE",           False)
+        monkeypatch.setattr(portfolio_mod, "_crypto_warning_printed", False)
+
+    def test_crypto_tickers_absent_from_holdings(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        assert "bitcoin" not in state["holdings"]
+
+    def test_crypto_bucket_absent_from_bucket_values(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        assert "Crypto" not in state["bucket_values"]
+
+    def test_crypto_bucket_absent_from_bucket_weights(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        assert "Crypto" not in state["bucket_weights"]
+
+    def test_bucket_weights_sum_to_100_without_crypto(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        total = sum(state["bucket_weights"].values())
+        assert abs(total - 100.0) < 0.1
+
+    def test_total_value_excludes_crypto(self):
+        # With CRYPTO_ACTIVE=False: MSFT(240)+JNJ(200)+NVDA(240)=680, no bitcoin(1000)
+        state = calculate_portfolio(MOCK_PRICES)
+        assert state["total_value"] == 680.00
+
+    def test_info_message_printed_once_when_inactive(self, capsys):
+        calculate_portfolio(MOCK_PRICES)
+        out = capsys.readouterr().out
+        assert "Crypto bucket inactive" in out
+
+    def test_info_message_not_printed_twice(self, capsys):
+        calculate_portfolio(MOCK_PRICES)
+        calculate_portfolio(MOCK_PRICES)
+        out = capsys.readouterr().out
+        assert out.count("Crypto bucket inactive") == 1
+
+    def test_check_rules_skips_crypto_weight_alert(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        # Force crypto_weight high — should not trigger when CRYPTO_ACTIVE=False
+        state["crypto_weight"] = 99.0
+        alerts = check_rules(state)
+        assert not any(a["rule"] == "crypto_weight" for a in alerts)
+
+    def test_check_bucket_drift_no_crypto_alert(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        alerts = check_bucket_drift(state)
+        assert not any(a["ticker"] == "Crypto" for a in alerts)
+
+    def test_check_bucket_drift_uses_adjusted_diversified_target(self):
+        # With MOCK_PRICES and CRYPTO_ACTIVE=False:
+        #   total_value=680, Diversified=440 (64.7%), Growth=240 (35.3%)
+        #   Adjusted target: Diversified=70.6% → drift=-5.9pp → alert fires
+        state = calculate_portfolio(MOCK_PRICES)
+        alerts = check_bucket_drift(state)
+        div_alert = next((a for a in alerts if a["ticker"] == "Diversified"), None)
+        assert div_alert is not None, "Expected Diversified drift alert"
+        assert "70.6" in div_alert["message"]
+
+    def test_check_bucket_drift_uses_adjusted_growth_target(self):
+        state = calculate_portfolio(MOCK_PRICES)
+        alerts = check_bucket_drift(state)
+        growth_alert = next((a for a in alerts if a["ticker"] == "Growth"), None)
+        assert growth_alert is not None, "Expected Growth drift alert"
+        assert "29.4" in growth_alert["message"]
