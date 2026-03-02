@@ -121,7 +121,7 @@ def build_context(
     bucket_values  = portfolio_state.get("bucket_values",  {})
     bucket_weights = portfolio_state.get("bucket_weights", {})
     bucket_targets = {"Diversified": 60, "Growth": 25, "Crypto": 15}
-    for bucket in ("Diversified", "Growth", "Crypto"):
+    for bucket in bucket_values:
         val    = bucket_values.get(bucket, 0.0)
         actual = bucket_weights.get(bucket, 0.0)
         target = bucket_targets.get(bucket, 0)

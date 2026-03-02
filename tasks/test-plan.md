@@ -222,10 +222,12 @@ print('✓ Empty headlines returns NEUTRAL correctly')
 
 ### IT-06 — Macro Theme Sentiment (Claude Haiku)
 
-**What it tests:** `news_sentiment.get_macro_sentiment()` runs all 4 themes and returns correctly shaped output.
+**What it tests:** `news_sentiment.get_macro_sentiment()` runs the correct set of themes and returns correctly shaped output.
 
-**Expected:**
-- Returns a dict with keys: `AI_TECH_THEME`, `SEMICONDUCTOR_THEME`, `DEFENSIVE_THEME`, `CRYPTO_THEME`
+**Note:** `CRYPTO_THEME` is only included when `CRYPTO_ACTIVE = True` in `config.py`. The default is `False`. This test runs with the default (3 themes). To test all 4, temporarily set `CRYPTO_ACTIVE = True`.
+
+**Expected (CRYPTO_ACTIVE = False — default):**
+- Returns a dict with keys: `AI_TECH_THEME`, `SEMICONDUCTOR_THEME`, `DEFENSIVE_THEME`
 - Each theme has `score`, `label`, `summary`, `affected_tickers`
 - `affected_tickers` matches the expected tickers per theme
 
@@ -238,20 +240,19 @@ EXPECTED_THEMES = {
     'AI_TECH_THEME':       ['MSFT', 'AAPL', 'GOOG', 'NVDA', 'ASML'],
     'SEMICONDUCTOR_THEME': ['NVDA', 'ASML'],
     'DEFENSIVE_THEME':     ['JPM', 'JNJ', 'XOM', 'BRK.B'],
-    'CRYPTO_THEME':        ['bitcoin', 'ethereum'],
 }
 VALID_LABELS = {'BEARISH', 'SLIGHTLY_BEARISH', 'NEUTRAL', 'SLIGHTLY_BULLISH', 'BULLISH'}
 result = get_macro_sentiment({})
-assert set(result.keys()) == set(EXPECTED_THEMES.keys()), f'Missing themes: {result.keys()}'
+assert set(result.keys()) == set(EXPECTED_THEMES.keys()), f'Unexpected themes: {result.keys()}'
 for theme, data in result.items():
     assert data['label'] in VALID_LABELS
     assert data['affected_tickers'] == EXPECTED_THEMES[theme]
     print(f'  {theme:<25} {data[\"label\"]} ({data[\"score\"]:+.2f})')
-print('✓ All 4 macro themes scored correctly')
+print('✓ All 3 macro themes scored correctly (CRYPTO_ACTIVE=False)')
 "
 ```
 
-**Pass criteria:** Exits 0, all 4 themes present with valid labels.
+**Pass criteria:** Exits 0, 3 themes present with valid labels.
 
 ---
 

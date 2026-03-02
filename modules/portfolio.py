@@ -175,12 +175,11 @@ def check_bucket_drift(portfolio_state: dict) -> list[dict]:
     if CRYPTO_ACTIVE:
         active_targets = BUCKET_TARGETS
     else:
-        # Recalculate targets across the two active buckets only.
-        # Diversified: 60/85*100 ≈ 70.6%,  Growth: 25/85*100 ≈ 29.4%
-        active_targets = {
-            "Diversified": round(60 / 85 * 100, 1),
-            "Growth":      round(25 / 85 * 100, 1),
-        }
+        # Renormalise non-crypto buckets to 100% so drift is measured correctly.
+        # Derived dynamically from BUCKET_TARGETS so it stays correct if weights change.
+        non_crypto = {k: v for k, v in BUCKET_TARGETS.items() if k != "Crypto"}
+        total      = sum(non_crypto.values())
+        active_targets = {k: round(v / total * 100, 1) for k, v in non_crypto.items()}
 
     for bucket, target_pct in active_targets.items():
         actual_pct = bucket_weights.get(bucket, 0.0)

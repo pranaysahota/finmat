@@ -200,8 +200,11 @@ def _append_trade(trade: dict) -> None:
 def _calc_cgt(gross_gain: float) -> float:
     """Calculate CGT owed under Irish law (33% on gain above €1,270 annual exemption).
 
-    Simplified: applies the full annual exemption to this disposal.
-    Caller should note that the exemption may already be partially used.
+    Simplified estimate: the gain is passed in USD (portfolio is priced in USD),
+    and the €1,270 exemption is applied as-is. This is only accurate when USD ≈ EUR.
+    The caller should convert to EUR at the actual disposal-time exchange rate
+    and verify with a tax professional.
+
     Returns 0.0 for a loss or a gain within the exemption.
     """
     return round(max(0.0, gross_gain - 1270) * 0.33, 2)
@@ -252,10 +255,10 @@ def _run_sell(portfolio: dict) -> None:
     remaining_qty      = round(current_qty - qty_sold, 8)
 
     if gross_gain_or_loss > 0:
-        cgt_detail = f"    CGT owed*:        ${cgt_owed:.2f}"
+        cgt_detail = f"    CGT owed*:        ~€{cgt_owed:.2f}"
     else:
         cgt_detail = (
-            f"    Loss banked*:     ${abs(gross_gain_or_loss):.2f}"
+            f"    Loss banked*:     ~€{abs(gross_gain_or_loss):.2f}"
             f" offsettable against future gains"
         )
 
@@ -271,7 +274,8 @@ def _run_sell(portfolio: dict) -> None:
   CGT ESTIMATE (Irish, 33%):
     Result:           {"GAIN" if gross_gain_or_loss > 0 else "LOSS"}
 {cgt_detail}
-  * Assumes full €1,270 annual exemption unused. Verify with your tax records.
+  * USD-denominated estimate. Apply EUR/USD rate at disposal for exact EUR gain.
+  * €1,270 annual exemption assumed unused. Verify with your tax records.
 
   Remaining position: {remaining_qty} shares
   ────────────────────────────────""")
