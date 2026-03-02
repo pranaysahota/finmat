@@ -1,8 +1,6 @@
 anthropic
 python-dotenv
 requests
-pandas
-numpy
 schedule
 feedparser
 textblob
