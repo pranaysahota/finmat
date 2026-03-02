@@ -218,13 +218,13 @@ class TestGetDecision:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "claude-sonnet-4-6"
 
-    def test_max_tokens_is_1500(self):
+    def test_max_tokens_is_2000(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
             get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["max_tokens"] == 1500
+        assert kwargs["max_tokens"] == 2000
 
     def test_system_prompt_contains_irish_tax(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
@@ -275,3 +275,44 @@ class TestGetDecision:
         # Triggered rule and sentiment should appear in the context passed to Claude
         assert "TRIGGERED RULES" in user_msg
         assert "BULLISH" in user_msg
+
+    def test_normal_mode_used_when_no_triggered_rules(self):
+        with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
+            mock_create = MockClient.return_value.messages.create
+            mock_create.return_value = _api_response(self.MOCK_BRIEFING)
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
+        assert "CGT IMPACT" not in mock_create.call_args.kwargs["system"]
+
+    def test_normal_mode_used_when_only_medium_rule_triggered(self):
+        medium_rule = [{"level": "MEDIUM", "ticker": "Growth", "rule": "bucket_drift",
+                        "message": "Growth drifted"}]
+        with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
+            mock_create = MockClient.return_value.messages.create
+            mock_create.return_value = _api_response(self.MOCK_BRIEFING)
+            get_decision(PORTFOLIO_STATE, medium_rule, [], {}, {}, {})
+        assert "CGT IMPACT" not in mock_create.call_args.kwargs["system"]
+
+    def test_alert_mode_used_when_high_rule_triggered(self):
+        # TRIGGERED_RULES fixture has level "HIGH"
+        with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
+            mock_create = MockClient.return_value.messages.create
+            mock_create.return_value = _api_response(self.MOCK_BRIEFING)
+            get_decision(PORTFOLIO_STATE, TRIGGERED_RULES, [], {}, {}, {})
+        assert "CGT IMPACT" in mock_create.call_args.kwargs["system"]
+
+    def test_alert_mode_used_when_critical_rule_triggered(self):
+        critical_rule = [{"level": "CRITICAL", "ticker": "NVDA", "rule": "stop_loss",
+                          "message": "NVDA stop-loss hit"}]
+        with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
+            mock_create = MockClient.return_value.messages.create
+            mock_create.return_value = _api_response(self.MOCK_BRIEFING)
+            get_decision(PORTFOLIO_STATE, critical_rule, [], {}, {}, {})
+        assert "CGT IMPACT" in mock_create.call_args.kwargs["system"]
+
+    def test_normal_prompt_instructs_no_cgt_commentary(self):
+        with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
+            mock_create = MockClient.return_value.messages.create
+            mock_create.return_value = _api_response(self.MOCK_BRIEFING)
+            get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
+        system = mock_create.call_args.kwargs["system"]
+        assert "Do not comment on CGT" in system
