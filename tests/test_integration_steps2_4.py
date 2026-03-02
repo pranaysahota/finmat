@@ -86,6 +86,12 @@ def _load_portfolio_from_file(path: Path) -> dict:
 class TestConfigToPriceFetcher:
     """The real PORTFOLIO from config is fully covered by get_all_prices."""
 
+    @pytest.fixture(autouse=True)
+    def patch_crypto_active(self, monkeypatch):
+        """These tests validate the full portfolio structure including Crypto."""
+        import modules.price_fetcher as pf_mod
+        monkeypatch.setattr(pf_mod, "CRYPTO_ACTIVE", True)
+
     def test_every_ticker_appears_in_prices(self):
         from config import PORTFOLIO
         from modules.price_fetcher import get_all_prices

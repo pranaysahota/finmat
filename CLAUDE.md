@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 # Finance Agent — Project Instructions for Claude Code
 
 Read this file in full before touching any code. Every decision here was made
@@ -69,16 +65,16 @@ performance anchor. It is not an external index — do not attempt to fetch it
 as a comparison benchmark separately from the portfolio.
 
 **Hedging rationale per position:**
-- `MSFT` — tech/cloud core, AI exposure, strong cash flows
-- `AAPL` — consumer tech, defensive mega-cap
-- `JPM`  — financials, outperforms when rates rise, low AI correlation
-- `JNJ`  — healthcare, non-cyclical, negative correlation to tech
-- `ASML` — European semiconductor equipment monopoly, genuine international exposure
+- `MSFT`  — tech/cloud core, AI exposure, strong cash flows
+- `AAPL`  — consumer tech, defensive mega-cap
+- `JPM`   — financials, outperforms when rates rise, low AI correlation
+- `JNJ`   — healthcare, non-cyclical, negative correlation to tech
+- `ASML`  — European semiconductor equipment monopoly, genuine international exposure
 - `BRK.B` — diversified conglomerate (insurance, energy, consumer), portfolio buffer
-- `XOM`  — energy, strongest negative correlator to tech during inflation spikes
-- `GOOG` — AI/Search/Cloud, concentrated growth bet
-- `NVDA` — AI chips, highest upside and highest volatility in portfolio
-- `bitcoin` — store of value, macro-uncorrelated, institutional adoption
+- `XOM`   — energy, strongest negative correlator to tech during inflation spikes
+- `GOOG`  — AI/Search/Cloud, concentrated growth bet
+- `NVDA`  — AI chips, highest upside and highest volatility in portfolio
+- `bitcoin`  — store of value, macro-uncorrelated, institutional adoption
 - `ethereum` — smart contract platform, higher beta to crypto cycle than BTC
 
 ---
@@ -94,10 +90,14 @@ as a comparison benchmark separately from the portfolio.
 | `data/portfolio_history.json` | ❌ No | `history.py` | Daily snapshots, never overwrite |
 | `data/trades.json` | ❌ No | `trade.py` | Permanent trade log |
 | `.env` | ❌ No | Human | API keys — never touch in code |
+| `tasks/todo.md` | ✅ Yes | Claude Code | Active task plan — updated each session |
+| `tasks/lessons.md` | ✅ Yes | Claude Code | Accumulated project-specific lessons |
 
 **Never** read `.env` directly — always use `python-dotenv` to load it.
 **Never** hand-edit `portfolio.local.py` — always route changes through `trade.py`.
 **Never** overwrite `portfolio_history.json` — only append to it.
+**Never** print raw portfolio holdings or prices to console unnecessarily —
+`portfolio.local.py` contains real financial data and must be treated as sensitive.
 
 ---
 
@@ -151,6 +151,9 @@ as a comparison benchmark separately from the portfolio.
   }
 }
 ```
+
+These shapes are contracts between modules. If you change one, you break
+everything downstream. Do not alter them without updating every affected module.
 
 ---
 
@@ -242,6 +245,14 @@ kill the entire briefing pipeline.
 - `history.py` is **append-only** — never overwrite existing snapshots
 - Ticker normalisation: stocks → UPPERCASE, crypto → lowercase
   (e.g. `NVDA`, `bitcoin`, `ethereum`)
+- **Simplicity first:** make every change as small as possible. Touch only the
+  code that needs to change. A minimal correct fix beats a clever refactor.
+  Financial calculation code is especially sensitive — an elegant restructure
+  that silently changes how `avg_buy` or `pnl_pct` is computed corrupts
+  every downstream number and every historical snapshot.
+- **Find root causes:** no temporary fixes, no workarounds that mask the real
+  problem. If `trade.py` produces a wrong `new_avg`, fix the weighted average
+  formula — don't patch the output.
 
 ---
 
@@ -250,7 +261,71 @@ kill the entire briefing pipeline.
 | Task | Model |
 |------|-------|
 | News sentiment scoring | `claude-haiku-4-5-20251001` — fast, cheap, runs per ticker |
-| Daily decision briefing | `claude-sonnet-4-6` — full reasoning, 600 max tokens |
+| Daily decision briefing | `claude-sonnet-4-6` — full reasoning, 1500 max tokens |
+
+---
+
+## Task Management
+
+For any multi-step change or new module build:
+
+1. **Plan first** — write the plan to `tasks/todo.md` with checkable items
+   before writing any code. For architectural changes, check in with the user
+   before starting implementation.
+2. **Track progress** — mark items complete as you go. Do not mark a task done
+   without verifying it works. For pipeline changes, verify by running the
+   affected module in isolation and confirming its output shape matches the
+   data contracts defined in this file.
+3. **Summarise changes** — provide a brief high-level summary after each step
+   so the user knows what changed and why.
+4. **Verification standard** — before marking anything complete, ask:
+   - Does the output shape match the data contracts in this file?
+   - Does `portfolio_history.json` remain append-only?
+   - Would a silent failure here corrupt historical data?
+   - Are real holdings or prices being printed to console unnecessarily?
+
+For simple, obvious fixes (typos, log message wording, single-line changes)
+skip the planning overhead and just fix it.
+
+---
+
+## Self-Improvement Loop
+
+After any correction from the user, append the lesson to `tasks/lessons.md`:
+- What went wrong
+- The specific rule that prevents it recurring
+
+Review `tasks/lessons.md` at the start of each session before writing any code.
+
+**Seed lessons already learned in this project:**
+
+1. `portfolio.local.py` qty values must be zero before first `trade.py` run —
+   non-zero estimates are treated as real positions and corrupt avg_buy.
+2. Bucket names are `Diversified / Growth / Crypto` — not `ETFs / Stocks / Crypto`.
+   Using old names breaks `check_bucket_drift()` and all snapshot comparisons.
+3. `MSFT` is a portfolio holding, not an external benchmark index.
+   Do not fetch it separately as a comparison index.
+4. `history.py` receives `portfolio_state` from `portfolio.py` — it does not
+   read `portfolio.local.py` directly. Never add direct file reads to history.py.
+5. Sentiment runs on stock tickers only — not crypto. Passing crypto tickers
+   to `get_all_sentiment()` wastes API calls and returns noise.
+6. `portfolio.local.py` must be rewritten using Python's `ast` module —
+   never string replacement. String replacement breaks on values that appear
+   in comments and produces malformed Python.
+
+---
+
+## Autonomous Bug Fixing
+
+When given a bug report, a failing module, or a broken pipeline step:
+- Read the error, trace it to the root cause, fix it
+- Do not ask for hand-holding through stack traces
+- Verify the fix works before reporting it done
+- If the fix touches financial calculations, re-run the affected module and
+  confirm output values are mathematically correct against a known input
+
+If something breaks mid-fix and the path forward is unclear — stop, re-assess,
+and re-plan before continuing. Do not keep pushing in the wrong direction.
 
 ---
 
@@ -265,3 +340,7 @@ kill the entire briefing pipeline.
 - Do not add `data/*.json` or `portfolio.local.py` to Git
 - Do not use string replacement to rewrite `portfolio.local.py` — use `ast`
 - Do not run sentiment analysis on crypto tickers — stocks only
+- Do not print raw holdings quantities or avg_buy prices to console in
+  non-debug contexts — this is real financial data
+- Do not introduce clever abstractions or refactors that touch calculation
+  logic without explicit instruction — simplicity protects correctness here

@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
+import modules.price_fetcher as pf_mod
 from modules.price_fetcher import (  # noqa: E402
     MAX_RETRIES,
     get_all_prices,
@@ -99,6 +100,13 @@ class TestGetStockPrice:
         called_url = mock_get.call_args.args[0]
         assert "NVDA" in called_url
 
+    def test_dot_in_ticker_replaced_with_dash_in_url(self):
+        with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_SUCCESS)) as mock_get:
+            get_stock_price("BRK.B")
+        called_url = mock_get.call_args.args[0]
+        assert "BRK-B" in called_url
+        assert "BRK.B" not in called_url
+
     def test_user_agent_header_sent(self):
         with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_SUCCESS)) as mock_get:
             get_stock_price("MSFT")
@@ -160,6 +168,11 @@ class TestGetCryptoPrice:
 # ── get_all_prices ────────────────────────────────────────────
 
 class TestGetAllPrices:
+
+    @pytest.fixture(autouse=True)
+    def patch_crypto_active(self, monkeypatch):
+        """Existing tests assume crypto is active (all tickers fetched)."""
+        monkeypatch.setattr(pf_mod, "CRYPTO_ACTIVE", True)
 
     PORTFOLIO = {
         "Diversified": {
@@ -246,3 +259,13 @@ class TestGetAllPrices:
         assert prices["XOM"]  is None
         assert prices["MSFT"] == 100.0
         assert prices["NVDA"] == 100.0
+
+    def test_crypto_tickers_not_fetched_when_inactive(self, monkeypatch):
+        """When CRYPTO_ACTIVE=False the Crypto bucket is skipped entirely."""
+        monkeypatch.setattr(pf_mod, "CRYPTO_ACTIVE", False)
+        with patch("modules.price_fetcher.get_stock_price",  return_value=100.0):
+            with patch("modules.price_fetcher.get_crypto_price", return_value=1000.0) as mock_crypto:
+                prices = get_all_prices(self.PORTFOLIO)
+        mock_crypto.assert_not_called()
+        assert "bitcoin"  not in prices
+        assert "ethereum" not in prices

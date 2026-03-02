@@ -6,7 +6,10 @@ from pathlib import Path
 # Allow direct invocation (python modules/portfolio.py) as well as import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import BUCKET_TARGETS, PORTFOLIO, RULES
+from config import BUCKET_TARGETS, CRYPTO_ACTIVE, PORTFOLIO, RULES
+
+# Tracks whether the one-time "crypto inactive" info line has been printed.
+_crypto_warning_printed: bool = False
 
 
 def calculate_portfolio(prices: dict) -> dict:
@@ -27,10 +30,23 @@ def calculate_portfolio(prices: dict) -> dict:
     Returns:
         portfolio_state dict — see CLAUDE.md for the full shape.
     """
+    global _crypto_warning_printed
+    if not CRYPTO_ACTIVE and not _crypto_warning_printed:
+        print(
+            "ℹ️  Crypto bucket inactive — set CRYPTO_ACTIVE = True in config.py "
+            "when first purchase is made"
+        )
+        _crypto_warning_printed = True
+
     holdings:      dict = {}
-    bucket_values: dict = {bucket: 0.0 for bucket in PORTFOLIO}
+    bucket_values: dict = {
+        bucket: 0.0 for bucket in PORTFOLIO
+        if bucket != "Crypto" or CRYPTO_ACTIVE
+    }
 
     for bucket, assets in PORTFOLIO.items():
+        if bucket == "Crypto" and not CRYPTO_ACTIVE:
+            continue
         for ticker, asset in assets.items():
             price = prices.get(ticker)
             if price is None:
@@ -122,17 +138,18 @@ def check_rules(portfolio_state: dict) -> list[dict]:
                 ),
             })
 
-    crypto_weight = portfolio_state.get("crypto_weight", 0.0)
-    if crypto_weight > RULES["crypto_max_weight"]:
-        alerts.append({
-            "level":   "MEDIUM",
-            "ticker":  "Crypto",
-            "rule":    "crypto_weight",
-            "message": (
-                f"🟡 Crypto weight is {crypto_weight:.1f}% — "
-                f"exceeds max {RULES['crypto_max_weight']}%"
-            ),
-        })
+    if CRYPTO_ACTIVE:
+        crypto_weight = portfolio_state.get("crypto_weight", 0.0)
+        if crypto_weight > RULES["crypto_max_weight"]:
+            alerts.append({
+                "level":   "MEDIUM",
+                "ticker":  "Crypto",
+                "rule":    "crypto_weight",
+                "message": (
+                    f"🟡 Crypto weight is {crypto_weight:.1f}% — "
+                    f"exceeds max {RULES['crypto_max_weight']}%"
+                ),
+            })
 
     return alerts
 
@@ -155,7 +172,16 @@ def check_bucket_drift(portfolio_state: dict) -> list[dict]:
     threshold: float      = RULES["bucket_drift_pct"]
     bucket_weights        = portfolio_state.get("bucket_weights", {})
 
-    for bucket, target_pct in BUCKET_TARGETS.items():
+    if CRYPTO_ACTIVE:
+        active_targets = BUCKET_TARGETS
+    else:
+        # Renormalise non-crypto buckets to 100% so drift is measured correctly.
+        # Derived dynamically from BUCKET_TARGETS so it stays correct if weights change.
+        non_crypto = {k: v for k, v in BUCKET_TARGETS.items() if k != "Crypto"}
+        total      = sum(non_crypto.values())
+        active_targets = {k: round(v / total * 100, 1) for k, v in non_crypto.items()}
+
+    for bucket, target_pct in active_targets.items():
         actual_pct = bucket_weights.get(bucket, 0.0)
         drift      = round(actual_pct - target_pct, 2)
 

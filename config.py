@@ -35,6 +35,12 @@ BUCKET_TARGETS = {
     "Crypto":      15,   # 15% — BTC + ETH
 }
 
+# ── Crypto Activation ────────────────────────────────────────
+# Set to True when the first crypto purchase is made via trade.py.
+# When False, the Crypto bucket is excluded from all calculations and
+# price fetches — drift targets are recalculated across Diversified + Growth only.
+CRYPTO_ACTIVE = False
+
 # ── Risk Rules ───────────────────────────────────────────────
 # Thresholds that trigger alerts when breached
 RULES = {
@@ -43,6 +49,35 @@ RULES = {
     "crypto_max_weight":  20,     # alert when crypto exceeds 20% of total portfolio value
     "bucket_drift_pct":    5,     # alert when any bucket drifts > 5pp from its target weight
     "benchmark":         "MSFT",  # largest position — use as internal performance anchor
+}
+
+# ── News Sources ─────────────────────────────────────────────
+# URL registries used by modules/news_sentiment.py.
+# {ticker} is interpolated at call time for ticker_specific templates.
+NEWS_SOURCES = {
+    # Used by get_all_sentiment() — one feed per ticker, interpolate {ticker}
+    "ticker_specific": [
+        "https://finance.yahoo.com/rss/headline?s={ticker}",
+        "https://news.google.com/rss/search?q={ticker}+stock&hl=en-US&gl=US&ceid=US:en",
+    ],
+
+    # Used by get_macro_sentiment() — general market and macro themes
+    "market_general": [
+        "https://feeds.reuters.com/reuters/businessNews",
+        "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+    ],
+
+    # Used by get_macro_sentiment() — European and sector coverage (ASML, XOM)
+    "european_and_sector": [
+        "https://feeds.marketwatch.com/marketwatch/marketpulse/",
+        "https://news.google.com/rss/search?q=european+stocks+semiconductor&hl=en-US&gl=US&ceid=US:en",
+    ],
+
+    # Used by get_macro_sentiment() — only when CRYPTO_ACTIVE is True
+    "crypto": [
+        "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "https://news.google.com/rss/search?q=bitcoin+ethereum+crypto+market&hl=en-US&gl=US&ceid=US:en",
+    ],
 }
 
 # ── File Paths (pathlib — not raw strings) ───────────────────
@@ -72,11 +107,12 @@ except ModuleNotFoundError:
 # USAGE — what each module imports from this file
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # modules/price_fetcher.py    → PORTFOLIO
-# modules/portfolio.py        → PORTFOLIO, RULES, BUCKET_TARGETS
-# modules/news_sentiment.py   → ANTHROPIC_API_KEY
+# modules/portfolio.py        → PORTFOLIO, RULES, BUCKET_TARGETS, CRYPTO_ACTIVE
+# modules/news_sentiment.py   → ANTHROPIC_API_KEY, CRYPTO_ACTIVE, NEWS_SOURCES
 # modules/decision_engine.py  → ANTHROPIC_API_KEY, RULES
 # modules/alerts.py           → TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 # modules/history.py          → PATHS
 # trade.py                    → PATHS
+# modules/price_fetcher.py    → CRYPTO_ACTIVE
 # main.py                     → PORTFOLIO, RULES, PATHS, DAILY_BRIEFING_TIME, PRICE_CHECK_INTERVAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
