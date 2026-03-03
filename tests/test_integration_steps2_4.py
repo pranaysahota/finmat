@@ -10,6 +10,10 @@ All HTTP calls are mocked; file I/O for history is redirected to tmp_path.
 trade.py file writes use a temporary copy of portfolio/local.py.
 """
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
 import importlib.util
 import json
 import sys
