@@ -11,6 +11,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
+      - run: cp portfolio/local.example.py portfolio/local.py
       - run: pytest tests/ -q
 
   docker-build:
