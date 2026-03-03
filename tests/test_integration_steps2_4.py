@@ -353,6 +353,9 @@ class TestFullPipeline:
         from modules.price_fetcher import get_all_prices
         from modules.history import save_snapshot, load_history
 
+        if "MSFT" not in PORTFOLIO.get("Diversified", {}):
+            pytest.skip("MSFT not in portfolio (CI using example file)")
+
         msft_price = 415.75
         msft_qty   = PORTFOLIO["Diversified"]["MSFT"]["qty"]   # 3.1
 
