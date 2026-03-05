@@ -161,9 +161,9 @@ def send_weekly_digest(performance: dict, portfolio_state: dict) -> None:
             lines.append(f"<b>This week:</b> {seven_day_pct:+.2f}%")
 
         if best:
-            lines.append(f"<b>Best performer:</b>  {best['ticker']} ({best['pnl_pct']:+.2f}%)")
+            lines.append(f"<b>Best performer:</b>  {html.escape(str(best['ticker']))} ({best['pnl_pct']:+.2f}%)")
         if worst:
-            lines.append(f"<b>Worst performer:</b> {worst['ticker']} ({worst['pnl_pct']:+.2f}%)")
+            lines.append(f"<b>Worst performer:</b> {html.escape(str(worst['ticker']))} ({worst['pnl_pct']:+.2f}%)")
 
         lines.append(
             f"<b>Total return since inception:</b> {inception_pct:+.2f}% (${inception_usd:+,.2f})"
