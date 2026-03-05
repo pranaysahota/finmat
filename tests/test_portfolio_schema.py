@@ -16,10 +16,10 @@ import pytest
 
 ROOT = Path(__file__).parent.parent
 
-REQUIRED_BUCKETS    = {"Diversified", "Growth"}
+REQUIRED_BUCKETS    = {"Diversified", "Growth", "Crypto"}
 REQUIRED_ASSET_KEYS = {"type", "qty", "avg_buy", "allocation_usd", "bucket_pct"}
 VALID_TYPES         = {"stock", "crypto"}
-BUCKET_TYPE_MAP     = {"Diversified": "stock", "Growth": "stock"}
+BUCKET_TYPE_MAP     = {"Diversified": "stock", "Growth": "stock", "Crypto": "crypto"}
 
 
 def _load_module_from_file(name: str, path: Path):
