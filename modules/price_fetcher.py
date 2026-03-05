@@ -83,7 +83,7 @@ def get_crypto_price(coin_id: str) -> float | None:
     return None
 
 
-def get_all_prices(portfolio: dict) -> dict:
+def get_all_prices(portfolio: dict, verbose: bool = False) -> dict:
     """Fetch live prices for every asset in the portfolio.
 
     Iterates all buckets and assets, detects type ("stock" or "crypto"),
@@ -95,6 +95,8 @@ def get_all_prices(portfolio: dict) -> dict:
     Args:
         portfolio: The PORTFOLIO dict from config.py, structured as
                    {bucket: {ticker: {type, qty, avg_buy, ...}}}.
+        verbose:   If True, print per-ticker fetch status to stdout.
+                   Defaults to False — avoid printing prices in normal operation.
 
     Returns:
         Flat dict of {ticker: price} for every asset.
@@ -116,8 +118,9 @@ def get_all_prices(portfolio: dict) -> dict:
                 icon          = "📈"
 
             prices[symbol] = fetched_price
-            status = f"${fetched_price:,.2f}" if fetched_price is not None else "FAILED"
-            print(f"  {icon} {symbol:<12} {status}")
+            if verbose:
+                status = f"${fetched_price:,.2f}" if fetched_price is not None else "FAILED"
+                print(f"  {icon} {symbol:<12} {status}")
 
     return prices
 
@@ -127,7 +130,7 @@ if __name__ == "__main__":
     from config import PORTFOLIO
 
     print("\n── Fetching all prices ──\n")
-    prices = get_all_prices(PORTFOLIO)
+    prices = get_all_prices(PORTFOLIO, verbose=True)
 
     print("\n── Results ──\n")
     for ticker, price in prices.items():

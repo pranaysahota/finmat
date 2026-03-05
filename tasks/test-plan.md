@@ -168,16 +168,18 @@ print(f'✓ Snapshot saved ({after_first} total, duplicate correctly skipped)')
 ```bash
 docker compose run --rm --env-file .env.test finmat \
   python -c "
+from config import NEWS_SOURCES
 from modules.news_sentiment import fetch_news
 tickers = ['MSFT', 'NVDA', 'AAPL']
 for ticker in tickers:
-    headlines = fetch_news(f'{ticker} stock news')
+    urls = [tmpl.format(ticker=ticker) for tmpl in NEWS_SOURCES['ticker_specific']]
+    headlines = fetch_news(urls)
     assert isinstance(headlines, list)
     print(f'  {ticker:<8} {len(headlines)} headlines')
     for h in headlines[:2]:
         print(f'    - {h[:80]}')
-# Nonsense query should return empty list, not crash
-result = fetch_news('xyzzy_not_a_real_thing_12345')
+# Dead/unreachable URL should return empty list, not crash
+result = fetch_news(['https://localhost:0/nonexistent.rss'])
 assert isinstance(result, list)
 print('✓ News fetch passed (including graceful empty result)')
 "

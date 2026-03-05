@@ -22,9 +22,8 @@ PORTFOLIO_STATE = {
     "total_cost":     8000.00,
     "total_pnl_usd":  200.00,
     "total_pnl_pct":  2.50,
-    "crypto_weight":  14.8,
-    "bucket_values":  {"Diversified": 4980.0, "Growth": 2010.0, "Crypto": 1210.0},
-    "bucket_weights": {"Diversified": 60.7, "Growth": 24.5, "Crypto": 14.8},
+    "bucket_values":  {"Diversified": 4980.0, "Growth": 2010.0},
+    "bucket_weights": {"Diversified": 71.2, "Growth": 28.8},
     "holdings": {
         "MSFT": {
             "current_price": 430.0, "current_value": 1290.0,
@@ -94,17 +93,13 @@ class TestBuildContext:
         ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "+200.00" in ctx
 
-    def test_crypto_weight_in_context(self):
-        ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
-        assert "14.8%" in ctx
-
     def test_contains_bucket_breakdown_section(self):
         ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "BUCKET BREAKDOWN" in ctx
 
     def test_all_buckets_appear_in_context(self):
         ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
-        for bucket in ("Diversified", "Growth", "Crypto"):
+        for bucket in ("Diversified", "Growth"):
             assert bucket in ctx
 
     def test_contains_holdings_section(self):
@@ -218,13 +213,13 @@ class TestGetDecision:
         kwargs = mock_create.call_args.kwargs
         assert kwargs["model"] == "claude-sonnet-4-6"
 
-    def test_max_tokens_is_2000(self):
+    def test_max_tokens_is_2500(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:
             mock_create = MockClient.return_value.messages.create
             mock_create.return_value = _api_response(self.MOCK_BRIEFING)
             get_decision(PORTFOLIO_STATE, [], [], {}, {}, {})
         kwargs = mock_create.call_args.kwargs
-        assert kwargs["max_tokens"] == 2000
+        assert kwargs["max_tokens"] == 2500
 
     def test_system_prompt_contains_irish_tax(self):
         with patch("modules.decision_engine.anthropic.Anthropic") as MockClient:

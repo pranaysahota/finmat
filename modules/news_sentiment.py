@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import feedparser
+import requests as _requests
 
 # Allow direct invocation (python modules/news_sentiment.py) as well as import
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,14 +15,15 @@ from config import ANTHROPIC_API_KEY, CRYPTO_ACTIVE, NEWS_SOURCES
 import anthropic
 
 _NEUTRAL = {"score": 0.0, "label": "NEUTRAL", "summary": "No news found."}
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
 
 def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
     """Fetch and aggregate headlines from a list of RSS feed URLs.
 
-    Fetches each URL with feedparser, collects up to max_items headlines per
-    feed, deduplicates across all feeds (exact string match), and returns up
-    to max_items total headlines in the order they were collected.
+    Pre-fetches each URL with requests (browser User-Agent) then passes the
+    content to feedparser. Many financial RSS feeds block the default feedparser
+    User-Agent, returning empty responses despite HTTP 200.
 
     Args:
         urls:      List of RSS feed URLs to fetch from.
@@ -37,13 +39,13 @@ def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
 
     for url in urls:
         try:
-            feed  = feedparser.parse(url)
-            items = [entry.title for entry in feed.entries[:max_items]]
+            response = _requests.get(url, headers=_HEADERS, timeout=10)
+            feed     = feedparser.parse(response.content)
+            items    = [entry.title for entry in feed.entries[:max_items]]
         except Exception:
             continue  # dead feed — skip silently
 
         if not items:
-            print(f"  ⚠️  No items from {url} — skipping")
             continue
 
         for title in items:

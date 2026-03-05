@@ -255,12 +255,17 @@ def _run_sell(portfolio: dict) -> None:
     remaining_qty      = round(current_qty - qty_sold, 8)
 
     if gross_gain_or_loss > 0:
+        cgt_result = "GAIN"
         cgt_detail = f"    CGT owed*:        ~€{cgt_owed:.2f}"
-    else:
+    elif gross_gain_or_loss < 0:
+        cgt_result = "LOSS"
         cgt_detail = (
             f"    Loss banked*:     ~€{abs(gross_gain_or_loss):.2f}"
             f" offsettable against future gains"
         )
+    else:
+        cgt_result = "BREAK-EVEN"
+        cgt_detail = "    No gain or loss — no CGT liability."
 
     print(f"""
   ────────────────────────────────
@@ -272,7 +277,7 @@ def _run_sell(portfolio: dict) -> None:
   Gross gain/loss:    ${gross_gain_or_loss:,.2f}
 
   CGT ESTIMATE (Irish, 33%):
-    Result:           {"GAIN" if gross_gain_or_loss > 0 else "LOSS"}
+    Result:           {cgt_result}
 {cgt_detail}
   * USD-denominated estimate. Apply EUR/USD rate at disposal for exact EUR gain.
   * €1,270 annual exemption assumed unused. Verify with your tax records.
