@@ -7,6 +7,7 @@ import schedule
 import time
 
 from config import (
+    CRYPTO_ACTIVE,
     DAILY_BRIEFING_TIME,
     PORTFOLIO,
     PRICE_CHECK_INTERVAL,
@@ -224,6 +225,12 @@ if __name__ == "__main__":
 
     history = load_history()
     print(f"📂 History: {len(history)} snapshots loaded")
+
+    if not CRYPTO_ACTIVE:
+        print(
+            "ℹ️  Crypto bucket inactive — set CRYPTO_ACTIVE = True in config.py "
+            "when first purchase is made"
+        )
 
     run_daily_briefing()
 
