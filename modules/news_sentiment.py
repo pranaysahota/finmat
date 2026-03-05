@@ -46,7 +46,6 @@ def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
             continue  # dead feed — skip silently
 
         if not items:
-            print(f"  ⚠️  No items from {url} — skipping")
             continue
 
         for title in items:

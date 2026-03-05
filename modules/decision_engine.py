@@ -6,7 +6,7 @@ from pathlib import Path
 # Allow direct invocation (python modules/decision_engine.py) as well as import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import ANTHROPIC_API_KEY, RULES
+from config import ANTHROPIC_API_KEY, BUCKET_TARGETS, CRYPTO_ACTIVE, RULES
 
 import anthropic
 
@@ -124,7 +124,7 @@ def build_context(
     lines.append("\nBUCKET BREAKDOWN")
     bucket_values  = portfolio_state.get("bucket_values",  {})
     bucket_weights = portfolio_state.get("bucket_weights", {})
-    bucket_targets = {"Diversified": 60, "Growth": 25}
+    bucket_targets = {k: v for k, v in BUCKET_TARGETS.items() if k != "Crypto" or CRYPTO_ACTIVE}
     for bucket in bucket_values:
         val    = bucket_values.get(bucket, 0.0)
         actual = bucket_weights.get(bucket, 0.0)
