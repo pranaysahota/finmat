@@ -1,23 +1,25 @@
-# fly.toml app configuration file generated for finmat on 2026-03-05T16:55:40Z
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# fly.toml — Fly.io configuration for the finmat agent
+# Worker process: no HTTP server, no ports, just a long-running scheduler.
 
-app = 'finmat'
-primary_region = 'ams'
+app = "finmat"
+primary_region = "ams"
 
 [build]
+  dockerfile = "Dockerfile"
 
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = 'stop'
-  auto_start_machines = true
-  min_machines_running = 0
-  processes = ['app']
+[deploy]
+  strategy = "immediate"
+
+[env]
+  TZ = "Europe/Dublin"
+
+# Persistent volume for portfolio history and trade log.
+# Create once with: fly volumes create finmat_data --region ams --size 1
+[[mounts]]
+  source      = "finmat_data"
+  destination = "/app/data"
 
 [[vm]]
-  memory = '1gb'
-  cpu_kind = 'shared'
+  memory = "256mb"
+  cpu_kind = "shared"
   cpus = 1
-  memory_mb = 256
