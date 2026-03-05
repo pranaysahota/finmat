@@ -21,9 +21,8 @@ PORTFOLIO_STATE = {
     "total_value":    8200.00,
     "total_pnl_usd":  200.00,
     "total_pnl_pct":  2.50,
-    "crypto_weight":  14.8,
-    "bucket_values":  {"Diversified": 4980.0, "Growth": 2010.0, "Crypto": 1210.0},
-    "bucket_weights": {"Diversified": 60.7, "Growth": 24.5, "Crypto": 14.8},
+    "bucket_values":  {"Diversified": 4980.0, "Growth": 2010.0},
+    "bucket_weights": {"Diversified": 71.2, "Growth": 28.8},
     "holdings": {
         "MSFT": {"current_price": 430.0, "current_value": 1290.0,
                  "pnl_pct": 7.5, "pnl_usd": 90.0, "bucket": "Diversified"},
@@ -169,13 +168,6 @@ class TestSendDailyBriefing:
             triggered_rules=[], bucket_drift=[], performance={},
         )
         assert "+200.00" in text
-
-    def test_crypto_weight_in_message(self):
-        text = self._captured_text(
-            portfolio_state=PORTFOLIO_STATE, decision=DECISION_TEXT,
-            triggered_rules=[], bucket_drift=[], performance={},
-        )
-        assert "14.8%" in text
 
     def test_eur_usd_note_present(self):
         text = self._captured_text(

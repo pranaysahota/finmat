@@ -26,7 +26,11 @@ from modules.news_sentiment import (
 
 
 class TestFetchNews:
-    """fetch_news aggregates headlines from a list of URLs and deduplicates."""
+    """fetch_news aggregates headlines from a list of URLs and deduplicates.
+
+    fetch_news pre-fetches with _requests.get (browser User-Agent) then passes
+    the raw content to feedparser.parse. Both layers must be mocked in tests.
+    """
 
     URLS = ["https://example.com/feed1", "https://example.com/feed2"]
 
@@ -36,41 +40,58 @@ class TestFetchNews:
         feed.entries = [MagicMock(title=t) for t in titles]
         return feed
 
+    def _mock_response(self, content: bytes = b"<rss/>") -> MagicMock:
+        """Build a fake requests.Response with a .content attribute."""
+        resp = MagicMock()
+        resp.content = content
+        return resp
+
     def test_returns_list_of_title_strings(self):
         titles = ["MSFT up 3%", "Microsoft beats earnings", "Azure growth accelerates"]
-        with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
-            result = fetch_news(["https://example.com/feed"])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
+                result = fetch_news(["https://example.com/feed"])
         assert result == titles
 
     def test_respects_max_items(self):
         titles = [f"Headline {i}" for i in range(10)]
-        with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
-            result = fetch_news(["https://example.com/feed"], max_items=3)
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
+                result = fetch_news(["https://example.com/feed"], max_items=3)
         assert len(result) == 3
         assert result == titles[:3]
 
-    def test_returns_empty_list_on_feedparser_exception(self):
-        with patch("modules.news_sentiment.feedparser.parse", side_effect=Exception("network error")):
+    def test_returns_empty_list_on_requests_exception(self):
+        with patch("modules.news_sentiment._requests.get", side_effect=Exception("network error")):
             result = fetch_news(["https://example.com/feed"])
+        assert result == []
+
+    def test_returns_empty_list_on_feedparser_exception(self):
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", side_effect=Exception("parse error")):
+                result = fetch_news(["https://example.com/feed"])
         assert result == []
 
     def test_returns_empty_list_when_no_entries(self):
         feed = MagicMock()
         feed.entries = []
-        with patch("modules.news_sentiment.feedparser.parse", return_value=feed):
-            result = fetch_news(["https://example.com/feed"])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=feed):
+                result = fetch_news(["https://example.com/feed"])
         assert result == []
 
     def test_default_max_items_is_five(self):
         titles = [f"H{i}" for i in range(10)]
-        with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
-            result = fetch_news(["https://example.com/feed"])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
+                result = fetch_news(["https://example.com/feed"])
         assert len(result) == 5
 
     def test_returns_fewer_than_max_when_feed_has_fewer(self):
         titles = ["Only one headline"]
-        with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
-            result = fetch_news(["https://example.com/feed"], max_items=5)
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=self._make_feed(titles)):
+                result = fetch_news(["https://example.com/feed"], max_items=5)
         assert result == ["Only one headline"]
 
     def test_empty_url_list_returns_empty_list(self):
@@ -83,8 +104,9 @@ class TestFetchNews:
         unique_b = "Only in feed B"
         feed_a = self._make_feed([shared, unique_a])
         feed_b = self._make_feed([shared, unique_b])
-        with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
-            result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=10)
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
+                result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=10)
         assert result.count(shared) == 1
         assert unique_a in result
         assert unique_b in result
@@ -92,23 +114,25 @@ class TestFetchNews:
     def test_collects_from_multiple_urls(self):
         feed_a = self._make_feed(["A1", "A2"])
         feed_b = self._make_feed(["B1", "B2"])
-        with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
-            result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=10)
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
+                result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=10)
         assert "A1" in result
         assert "B1" in result
 
     def test_skips_failed_url_silently_and_returns_from_working_url(self):
         good_feed = self._make_feed(["Good headline"])
         with patch(
-            "modules.news_sentiment.feedparser.parse",
-            side_effect=[Exception("timeout"), good_feed],
+            "modules.news_sentiment._requests.get",
+            side_effect=[Exception("timeout"), self._mock_response()],
         ):
-            result = fetch_news(["https://dead.com/rss", "https://live.com/rss"])
+            with patch("modules.news_sentiment.feedparser.parse", return_value=good_feed):
+                result = fetch_news(["https://dead.com/rss", "https://live.com/rss"])
         assert result == ["Good headline"]
 
     def test_returns_empty_when_all_urls_fail(self):
         with patch(
-            "modules.news_sentiment.feedparser.parse",
+            "modules.news_sentiment._requests.get",
             side_effect=Exception("all down"),
         ):
             result = fetch_news(["https://a.com/rss", "https://b.com/rss"])
@@ -118,9 +142,20 @@ class TestFetchNews:
         # Two feeds each with 5 unique headlines, max_items=5 → return only 5 total
         feed_a = self._make_feed([f"A{i}" for i in range(5)])
         feed_b = self._make_feed([f"B{i}" for i in range(5)])
-        with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
-            result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=5)
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", side_effect=[feed_a, feed_b]):
+                result = fetch_news(["https://a.com/rss", "https://b.com/rss"], max_items=5)
         assert len(result) == 5
+
+    def test_feedparser_receives_response_content(self):
+        """feedparser.parse is called with response.content bytes, not the URL string."""
+        raw_content = b"<rss><channel><item><title>Test</title></item></channel></rss>"
+        resp = self._mock_response(content=raw_content)
+        feed = self._make_feed(["Test"])
+        with patch("modules.news_sentiment._requests.get", return_value=resp):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=feed) as mock_parse:
+                fetch_news(["https://example.com/feed"])
+        mock_parse.assert_called_once_with(raw_content)
 
 
 # ── score_sentiment ───────────────────────────────────────────

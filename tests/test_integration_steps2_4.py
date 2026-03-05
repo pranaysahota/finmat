@@ -30,17 +30,10 @@ sys.path.insert(0, str(ROOT))
 
 # Prices that cover every ticker in the real PORTFOLIO
 MOCK_PRICES = {
-    "MSFT":     415.75,
-    "AAPL":     232.10,
-    "JPM":      247.80,
-    "JNJ":      156.20,
-    "ASML":     685.40,
-    "BRK.B":    478.90,
-    "XOM":      116.30,
-    "GOOG":     178.20,
-    "NVDA":     138.50,
-    "bitcoin":  96200.0,
-    "ethereum":  2750.0,
+    "MSFT":  415.75,
+    "AAPL":  232.10,
+    "JPM":   247.80,
+    "GOOGL": 178.20,
 }
 
 # Minimal portfolio source for file-based tests (mirrors local.py structure)
@@ -58,15 +51,6 @@ MINIMAL_PORTFOLIO_SOURCE = textwrap.dedent("""\
         "Growth": {
             "NVDA": {
                 "type":           "stock",
-                "qty":            0,
-                "avg_buy":        0.0,
-                "allocation_usd": 0,
-                "bucket_pct":     0,
-            },
-        },
-        "Crypto": {
-            "bitcoin": {
-                "type":           "crypto",
                 "qty":            0,
                 "avg_buy":        0.0,
                 "allocation_usd": 0,
@@ -92,7 +76,11 @@ class TestConfigToPriceFetcher:
 
     @pytest.fixture(autouse=True)
     def patch_crypto_active(self, monkeypatch):
-        """These tests validate the full portfolio structure including Crypto."""
+        """Force CRYPTO_ACTIVE=True so get_all_prices processes the Crypto bucket.
+
+        These tests validate full portfolio coverage — all buckets including Crypto
+        must be iterated. API calls are mocked so no real network requests are made.
+        """
         import modules.price_fetcher as pf_mod
         monkeypatch.setattr(pf_mod, "CRYPTO_ACTIVE", True)
 
@@ -229,7 +217,7 @@ class TestPriceFetcherToHistory:
             "total_pnl_usd":  0.0,
             "total_pnl_pct":  0.0,
             "crypto_weight":  0.0,
-            "bucket_values":  {"Diversified": 0.0, "Growth": 0.0, "Crypto": 0.0},
+            "bucket_values":  {"Diversified": 0.0, "Growth": 0.0},
             "holdings":       holdings,
         }
 
@@ -335,7 +323,7 @@ class TestFullPipeline:
             "total_pnl_usd":  0.0,
             "total_pnl_pct":  0.0,
             "crypto_weight":  0.0,
-            "bucket_values":  {"Diversified": 0.0, "Growth": 0.0, "Crypto": 0.0},
+            "bucket_values":  {"Diversified": 0.0, "Growth": 0.0},
             "holdings":       holdings_snap,
         }
 
@@ -378,7 +366,7 @@ class TestFullPipeline:
             "total_value":   round(sum(h["current_value"] for h in holdings_snap.values()), 2),
             "total_cost":    0.0, "total_pnl_usd": 0.0, "total_pnl_pct": 0.0,
             "crypto_weight": 0.0,
-            "bucket_values": {"Diversified": 0.0, "Growth": 0.0, "Crypto": 0.0},
+            "bucket_values": {"Diversified": 0.0, "Growth": 0.0},
             "holdings":      holdings_snap,
         }
 
@@ -409,7 +397,7 @@ class TestFullPipeline:
         state = {
             "total_value":   0.0, "total_cost": 0.0,
             "total_pnl_usd": 0.0, "total_pnl_pct": 0.0, "crypto_weight": 0.0,
-            "bucket_values": {"Diversified": 0.0, "Growth": 0.0, "Crypto": 0.0},
+            "bucket_values": {"Diversified": 0.0, "Growth": 0.0},
             "holdings":      holdings_snap,
         }
 

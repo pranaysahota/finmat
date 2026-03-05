@@ -76,7 +76,6 @@ def send_daily_briefing(
     total_value   = portfolio_state.get("total_value",   0.0)
     total_pnl_usd = portfolio_state.get("total_pnl_usd", 0.0)
     total_pnl_pct = portfolio_state.get("total_pnl_pct", 0.0)
-    crypto_weight = portfolio_state.get("crypto_weight", 0.0)
 
     lines: list[str] = [
         f"{header_icon} <b>Finance Agent — Daily Briefing</b>",
@@ -84,7 +83,6 @@ def send_daily_briefing(
         "",
         f"<b>Portfolio Value:</b> ${total_value:,.2f}",
         f"<b>Total P&L:</b> ${total_pnl_usd:+,.2f} ({total_pnl_pct:+.2f}%)",
-        f"<b>Crypto weight:</b> {crypto_weight:.1f}%",
         "",
         "<i>Portfolio priced in USD — gains/losses in EUR will vary with exchange rate at time of disposal</i>",
         "",
