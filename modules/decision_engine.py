@@ -15,9 +15,10 @@ You are a personal investment advisor monitoring a moderate-risk $8,000 \
 portfolio based in Ireland with a 6-12 month horizon.
 
 PORTFOLIO STRUCTURE:
-- 60% Diversified (MSFT, AAPL, JPM, JNJ, ASML, BRK.B, XOM)
+- 60% Diversified (MSFT, AAPL, JPM, JNJ, BRK.B, XOM, VZ, LMT)
 - 25% Growth (GOOG, NVDA)
-- 15% Crypto (BTC, ETH — currently inactive)
+
+WATCHLIST (not yet held — monitor for entry opportunity):
 
 HEDGING CONTEXT:
 JPM, JNJ, XOM and BRK.B are deliberate hedges against tech/AI weakness.
@@ -38,6 +39,10 @@ MARKET MOOD: [one sentence]
 
 PORTFOLIO STATUS: [2-3 sentences — overall health, which buckets helping
 vs hurting, any macro theme dominating]
+
+SENTIMENT SNAPSHOT:
+[one line per held ticker: TICKER — LABEL (score) — one sentence from the news]
+If no sentiment data is available for a ticker, write: TICKER — NEUTRAL — No news data.
 
 WATCH LIST:
 [2-3 specific things to monitor this week with brief reason.
@@ -114,13 +119,12 @@ def build_context(
         f"  P&L:           ${portfolio_state.get('total_pnl_usd', 0):+,.2f} "
         f"({portfolio_state.get('total_pnl_pct', 0):+.2f}%)"
     )
-    lines.append(f"  Crypto weight: {portfolio_state.get('crypto_weight', 0):.1f}%")
 
     # ── Bucket Breakdown ──
     lines.append("\nBUCKET BREAKDOWN")
     bucket_values  = portfolio_state.get("bucket_values",  {})
     bucket_weights = portfolio_state.get("bucket_weights", {})
-    bucket_targets = {"Diversified": 60, "Growth": 25, "Crypto": 15}
+    bucket_targets = {"Diversified": 60, "Growth": 25}
     for bucket in bucket_values:
         val    = bucket_values.get(bucket, 0.0)
         actual = bucket_weights.get(bucket, 0.0)
@@ -275,7 +279,7 @@ def get_decision(
         client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         response = client.messages.create(
             model      = "claude-sonnet-4-6",
-            max_tokens = 2000,
+            max_tokens = 2500,
             system     = system_prompt,
             messages   = [{"role": "user", "content": context}],
         )

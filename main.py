@@ -216,14 +216,19 @@ def run_weekly_digest() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    run_once = "--once" in sys.argv
+
     startup_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"🚀 Finance Agent started — {startup_ts}")
 
     history = load_history()
     print(f"📂 History: {len(history)} snapshots loaded")
 
-    # Run briefing immediately on first start for testing
     run_daily_briefing()
+
+    if run_once:
+        sys.exit(0)
 
     # Schedule recurring jobs
     schedule.every(PRICE_CHECK_INTERVAL).hours.do(run_price_check)
