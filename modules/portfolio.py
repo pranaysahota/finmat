@@ -8,10 +8,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, PORTFOLIO, RULES
 
-# Tracks whether the one-time "crypto inactive" info line has been printed.
-_crypto_warning_printed: bool = False
-
-
 def calculate_portfolio(prices: dict) -> dict:
     """Calculate the full portfolio state from holdings and live prices.
 
@@ -30,13 +26,6 @@ def calculate_portfolio(prices: dict) -> dict:
     Returns:
         portfolio_state dict — see CLAUDE.md for the full shape.
     """
-    global _crypto_warning_printed
-    if not CRYPTO_ACTIVE and not _crypto_warning_printed:
-        print(
-            "ℹ️  Crypto bucket inactive — set CRYPTO_ACTIVE = True in config.py "
-            "when first purchase is made"
-        )
-        _crypto_warning_printed = True
 
     holdings:      dict = {}
     bucket_values: dict = {

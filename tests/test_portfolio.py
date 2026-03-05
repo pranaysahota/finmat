@@ -67,7 +67,6 @@ def patch_module_globals(monkeypatch):
     monkeypatch.setattr(portfolio_mod, "RULES",                   MOCK_RULES)
     monkeypatch.setattr(portfolio_mod, "BUCKET_TARGETS",          MOCK_TARGETS)
     monkeypatch.setattr(portfolio_mod, "CRYPTO_ACTIVE",           True)
-    monkeypatch.setattr(portfolio_mod, "_crypto_warning_printed", False)
 
 
 # ── calculate_portfolio ───────────────────────────────────────
@@ -427,8 +426,7 @@ class TestCryptoInactive:
 
     @pytest.fixture(autouse=True)
     def set_crypto_inactive(self, monkeypatch):
-        monkeypatch.setattr(portfolio_mod, "CRYPTO_ACTIVE",           False)
-        monkeypatch.setattr(portfolio_mod, "_crypto_warning_printed", False)
+        monkeypatch.setattr(portfolio_mod, "CRYPTO_ACTIVE", False)
 
     def test_crypto_tickers_absent_from_holdings(self):
         state = calculate_portfolio(MOCK_PRICES)
@@ -451,17 +449,6 @@ class TestCryptoInactive:
         # With CRYPTO_ACTIVE=False: MSFT(240)+JNJ(200)+NVDA(240)=680, no bitcoin(1000)
         state = calculate_portfolio(MOCK_PRICES)
         assert state["total_value"] == 680.00
-
-    def test_info_message_printed_once_when_inactive(self, capsys):
-        calculate_portfolio(MOCK_PRICES)
-        out = capsys.readouterr().out
-        assert "Crypto bucket inactive" in out
-
-    def test_info_message_not_printed_twice(self, capsys):
-        calculate_portfolio(MOCK_PRICES)
-        calculate_portfolio(MOCK_PRICES)
-        out = capsys.readouterr().out
-        assert out.count("Crypto bucket inactive") == 1
 
     def test_check_rules_skips_crypto_weight_alert(self):
         state = calculate_portfolio(MOCK_PRICES)
