@@ -74,6 +74,16 @@ def _load_portfolio_from_file(path: Path) -> dict:
 class TestConfigToPriceFetcher:
     """The real PORTFOLIO from config is fully covered by get_all_prices."""
 
+    @pytest.fixture(autouse=True)
+    def patch_crypto_active(self, monkeypatch):
+        """Force CRYPTO_ACTIVE=True so get_all_prices processes the Crypto bucket.
+
+        These tests validate full portfolio coverage — all buckets including Crypto
+        must be iterated. API calls are mocked so no real network requests are made.
+        """
+        import modules.price_fetcher as pf_mod
+        monkeypatch.setattr(pf_mod, "CRYPTO_ACTIVE", True)
+
     def test_every_ticker_appears_in_prices(self):
         from config import PORTFOLIO
         from modules.price_fetcher import get_all_prices
