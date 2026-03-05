@@ -7,6 +7,9 @@ primary_region = "ams"
 [build]
   dockerfile = "Dockerfile"
 
+[deploy]
+  strategy = "immediate"
+
 [env]
   TZ = "Europe/Dublin"
 
