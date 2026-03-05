@@ -1,0 +1,22 @@
+# fly.toml — Fly.io configuration for the finmat agent
+# Worker process: no HTTP server, no ports, just a long-running scheduler.
+
+app = "finmat"
+primary_region = "dub"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  TZ = "Europe/Dublin"
+
+# Persistent volume for portfolio history and trade log.
+# Create once with: fly volumes create finmat_data --region dub --size 1
+[[mounts]]
+  source      = "finmat_data"
+  destination = "/app/data"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

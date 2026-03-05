@@ -15,4 +15,8 @@ RUN test -f portfolio/local.py || cp portfolio/local.example.py portfolio/local.
 # Run schema tests — build fails here if any test fails
 RUN python -m pytest tests/ -v
 
-CMD ["python", "main.py"]
+# Entrypoint reconstructs portfolio/local.py from secret then starts the agent
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+CMD ["./entrypoint.sh"]

@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
