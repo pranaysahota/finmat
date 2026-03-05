@@ -57,7 +57,7 @@ fly status --app finmat
 ### Deployment
 
 ```bash
-# Deploy latest release branch image
+# Deploy latest main branch image
 fly deploy --app finmat
 
 # Deploy a specific image (e.g. from a CI run)
@@ -124,13 +124,13 @@ fly machines restart --app finmat
 
 ### Deploying a code change
 
-Follow the branch flow: `dev` -> `main` -> `release`.
+Follow the branch flow: `dev` -> `main`.
 
-1. Merge your PR into `main`
-2. Cherry-pick the commit onto a branch off `release`, raise a PR to `release`
-3. CI (`release.yml`) triggers `fly deploy` automatically on merge to `release`
+1. Raise a PR from `dev` to `main`
+2. CI runs all tests and a Docker build on the PR
+3. Merge the PR — CI automatically deploys to Fly.io on merge to `main`
 
-Never push directly to `main` or `release` — both have branch protection rules requiring PRs.
+Never push directly to `main` — it has branch protection rules requiring a PR.
 
 ### Checking the daily briefing ran
 
