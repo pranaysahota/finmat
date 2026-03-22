@@ -1,6 +1,9 @@
 """Entry point — wires all modules together, runs price checks and daily briefings on a schedule."""
 
-from datetime import datetime
+import html
+from datetime import datetime, timedelta
+
+import markdown as md
 from zoneinfo import ZoneInfo
 
 import schedule
@@ -15,9 +18,13 @@ from config import (
 from modules.alerts import (
     send_critical_alert,
     send_daily_briefing,
-    send_weekly_digest,
+    send_weekly_email,
 )
-from modules.decision_engine import get_decision
+from modules.decision_engine import (
+    get_decision,
+    get_weekly_analysis,
+    get_weekly_sell_recommendations,
+)
 from modules.history import (
     get_performance_summary,
     load_history,
@@ -194,26 +201,139 @@ def run_daily_briefing() -> None:
 
 
 def run_weekly_digest() -> None:
-    """Weekly Sunday 09:00 digest: prices → portfolio → performance → send.
+    """Weekly Sunday 09:00 digest: prices → sentiment → Gemini analysis → sell recs → send.
 
-    Silently skips if fewer than 2 history snapshots exist (not enough data).
+    Pipeline:
+        get_performance_summary  (skips if insufficient history)
+        → get_all_prices + calculate_portfolio + check_rules
+        → get_all_sentiment + get_macro_sentiment
+        → get_weekly_analysis      (Gemini + Google Search)
+        → get_weekly_sell_recommendations  (Gemini, no Search)
+        → assemble HTML digest body
+        → send_weekly_email
+
+    Each step is wrapped independently — a failure at any step does not
+    prevent subsequent steps from running.
     """
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ts  = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = datetime.now()
     print(f"[{ts}] ── Weekly Digest started ──")
 
+    # ── 1. Performance summary ──
     try:
         performance = get_performance_summary()
         if not performance:
             print(f"[{ts}] Weekly Digest skipped — insufficient history")
             return
+    except Exception as exc:
+        print(f"[{ts}] Performance summary FAILED: {exc}")
+        return
 
+    # ── 2. Prices + portfolio state + rules ──
+    try:
         prices          = get_all_prices(PORTFOLIO)
         portfolio_state = calculate_portfolio(prices)
-        send_weekly_digest(performance, portfolio_state)
-        print(f"[{ts}] ── Weekly Digest sent ──")
-
+        triggered_rules = check_rules(portfolio_state)
     except Exception as exc:
-        print(f"[{ts}] Weekly Digest FAILED: {exc}")
+        print(f"[{ts}] Prices/portfolio FAILED: {exc}")
+        portfolio_state = {}
+        triggered_rules = []
+
+    # ── 3. Sentiment (stocks only) + macro sentiment ──
+    sentiment      = {}
+    macro_sentiment = {}
+    print(f"[{ts}] 📊 Fetching sentiment for weekly digest...")
+    try:
+        stock_tickers = [
+            ticker
+            for bucket, holdings in PORTFOLIO.items()
+            for ticker, asset in holdings.items()
+            if asset.get("type") == "stock"
+        ]
+        sentiment = get_all_sentiment(stock_tickers)
+    except Exception as exc:
+        print(f"[{ts}] Sentiment FAILED: {exc}")
+
+    try:
+        macro_sentiment = get_macro_sentiment(portfolio_state)
+    except Exception as exc:
+        print(f"[{ts}] Macro sentiment FAILED: {exc}")
+
+    # ── 4. Gemini per-stock analysis ──
+    gemini_analysis = ""
+    print(f"[{ts}] 🤖 Running Gemini per-stock analysis...")
+    try:
+        gemini_analysis = get_weekly_analysis(
+            portfolio_state, performance, sentiment, macro_sentiment
+        )
+    except Exception as exc:
+        print(f"[{ts}] Gemini analysis FAILED: {exc}")
+        gemini_analysis = "⚠️ Gemini analysis unavailable this week."
+
+    # ── 5. Sell recommendations ──
+    sell_recs = ""
+    print(f"[{ts}] 🧠 Running sell recommendations...")
+    try:
+        sell_recs = get_weekly_sell_recommendations(
+            portfolio_state, triggered_rules, sentiment, macro_sentiment
+        )
+    except Exception as exc:
+        print(f"[{ts}] Sell recommendations FAILED: {exc}")
+        sell_recs = "⚠️ Sell recommendations unavailable this week."
+
+    # ── 6. Assemble digest ──
+    week_start  = (now - timedelta(days=7)).strftime("%d %b")
+    week_end    = now.strftime("%d %b %Y")
+    date_range  = f"{week_start} – {week_end}"
+    total_value = portfolio_state.get("total_value", 0.0)
+
+    seven_day_pct = performance.get("last_7_days_pct")
+    inception_pct = performance.get("since_inception_pct", 0.0)
+    inception_usd = performance.get("since_inception_usd", 0.0)
+    best          = performance.get("best_performer")
+    worst         = performance.get("worst_performer")
+
+    cgt_footer = (
+        "🇮🇪 Irish CGT reminder: pay by 15 Dec for Jan–Nov disposals, "
+        "31 Jan for December disposals. €1,270 annual exemption resets 1 Jan."
+    )
+
+    # HTML email body
+    perf_rows = f"<tr><td><b>Portfolio value</b></td><td>${total_value:,.2f}</td></tr>\n"
+    if seven_day_pct is not None:
+        perf_rows += f"    <tr><td><b>This week</b></td><td>{seven_day_pct:+.2f}%</td></tr>\n"
+    if best:
+        perf_rows += f"    <tr><td><b>Best performer</b></td><td>{html.escape(str(best['ticker']))} ({best['pnl_pct']:+.2f}%)</td></tr>\n"
+    if worst:
+        perf_rows += f"    <tr><td><b>Worst performer</b></td><td>{html.escape(str(worst['ticker']))} ({worst['pnl_pct']:+.2f}%)</td></tr>\n"
+    perf_rows += f"    <tr><td><b>Since inception</b></td><td>{inception_pct:+.2f}% (${inception_usd:+,.2f})</td></tr>"
+
+    email_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: monospace; font-size: 14px; color: #222; max-width: 800px; margin: 0 auto;">
+  <h2>📊 Weekly Digest — {html.escape(date_range)}</h2>
+
+  <table style="border-collapse: collapse; margin-bottom: 24px;">
+    {perf_rows}
+  </table>
+
+  <h3>📈 Per-Stock Analysis</h3>
+  <div style="background: #f5f5f5; padding: 12px; border-radius: 4px;">{md.markdown(gemini_analysis)}</div>
+
+  <h3>💡 Sell Recommendations</h3>
+  <div style="background: #f5f5f5; padding: 12px; border-radius: 4px;">{md.markdown(sell_recs)}</div>
+
+  <hr>
+  <p style="color: #555; font-size: 12px;">🇮🇪 {html.escape(cgt_footer)}</p>
+</body>
+</html>"""
+
+    # ── 7. Send email ──
+    print(f"[{ts}] 📧 Sending weekly email...")
+    try:
+        send_weekly_email(f"📊 Finmat Weekly — {date_range}", email_body)
+    except Exception as exc:
+        print(f"[{ts}] Email send FAILED: {exc}")
 
 
 if __name__ == "__main__":
