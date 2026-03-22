@@ -1,8 +1,12 @@
 """Sends Telegram alerts for daily briefings, critical rule triggers, and portfolio events."""
 
 import html
+import logging
+import os
+import smtplib
 import sys
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from pathlib import Path
 
 import requests
@@ -176,6 +180,51 @@ def send_weekly_digest(performance: dict, portfolio_state: dict) -> None:
     )
 
     send_message("\n".join(lines))
+
+
+def send_weekly_email(subject: str, body: str) -> None:
+    """Send the weekly digest as an HTML email via STARTTLS SMTP.
+
+    All configuration is loaded from environment variables. If any required
+    variable is missing or empty, logs a single warning and returns silently.
+    Any SMTP error is logged and swallowed — never raises.
+
+    Args:
+        subject: Email subject line.
+        body:    HTML email body.
+    """
+    sender    = os.environ.get("EMAIL_SENDER",     "")
+    password  = os.environ.get("EMAIL_PASSWORD",   "")
+    recipient = os.environ.get("EMAIL_RECIPIENT",  "")
+    smtp_host = os.environ.get("EMAIL_SMTP_HOST",  "smtp.gmail.com")
+    smtp_port = os.environ.get("EMAIL_SMTP_PORT",  "587")
+
+    if not all([sender, password, recipient]):
+        logging.warning(
+            "send_weekly_email: EMAIL_SENDER, EMAIL_PASSWORD, or EMAIL_RECIPIENT "
+            "not set — skipping email delivery."
+        )
+        return
+
+    try:
+        port = int(smtp_port)
+    except ValueError:
+        logging.warning("send_weekly_email: EMAIL_SMTP_PORT is not a valid integer — skipping.")
+        return
+
+    msg = MIMEText(body, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"]    = sender
+    msg["To"]      = recipient
+
+    try:
+        with smtplib.SMTP(smtp_host, port, timeout=30) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(sender, password)
+            server.sendmail(sender, recipient, msg.as_string())
+    except Exception as exc:
+        logging.error("send_weekly_email: SMTP error — %s", exc)
 
 
 # HOW TO CREATE YOUR TELEGRAM BOT:

@@ -1,5 +1,6 @@
 """Sends portfolio state, triggered rules, and sentiment to Claude and returns a structured investment briefing."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,34 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import ANTHROPIC_API_KEY, BUCKET_TARGETS, CRYPTO_ACTIVE, RULES
 
 import anthropic
+
+try:
+    from google import genai
+    from google.genai import types as genai_types
+
+    _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    _gemini_client = genai.Client(api_key=_GEMINI_API_KEY)
+
+    _GEMINI_MODEL = "gemini-3-flash-preview"
+
+    _GEMINI_ANALYSIS_SYSTEM = (
+        "You are a financial analyst producing a weekly equity review for a private "
+        "investor based in Ireland with a 6-12 month horizon. Ground every claim in "
+        "recent news. Be concise — 4-5 sentences per stock maximum. No fluff."
+    )
+
+    _GEMINI_SELL_SYSTEM = (
+        "You are a financial advisor for an Irish investor. Apply Irish CGT rules strictly: "
+        "33% on gains at disposal, €1,270 annual exemption, losses carry forward "
+        "indefinitely. Never recommend selling solely to rebalance — tax cost must be "
+        "justified by the trade. All values in USD unless stated."
+    )
+
+    _GEMINI_AVAILABLE = True
+
+except Exception as _gemini_init_err:
+    print(f"  ⚠️  Gemini init failed: {_gemini_init_err}")
+    _GEMINI_AVAILABLE = False
 
 _SYSTEM_PROMPT_NORMAL = """\
 You are a personal investment advisor monitoring a moderate-risk $8,000 \
@@ -288,6 +317,196 @@ def get_decision(
     except Exception as exc:
         print(f"  ⚠️  Decision engine error: {exc}")
         return _FALLBACK_DECISION
+
+
+def get_weekly_analysis(
+    portfolio_state: dict,
+    performance: dict,
+    sentiment: dict,
+    macro_sentiment: dict,
+) -> str:
+    """Generate a Gemini-powered per-stock weekly analysis with Google Search grounding.
+
+    Builds a structured prompt from portfolio_state, performance, per-ticker sentiment,
+    and macro themes, then asks Gemini 3 Flash (with Google Search) to produce a
+    4-5 sentence review per holding covering: news this week, analyst consensus,
+    thesis validity, and one-sentence forward outlook.
+
+    Args:
+        portfolio_state: Dict as returned by calculate_portfolio().
+        performance:     Dict from get_performance_summary(), or empty dict.
+        sentiment:       Dict of {ticker: {score, label, summary}} from get_all_sentiment().
+        macro_sentiment: Dict of {theme: {score, label, summary, affected_tickers}}
+                         from get_macro_sentiment().
+
+    Returns:
+        Gemini's formatted analysis string, or a fallback message on any error.
+    """
+    if not _GEMINI_AVAILABLE:
+        return "⚠️ Gemini analysis unavailable this week."
+
+    # Build ticker → macro themes lookup
+    ticker_macro: dict[str, list[tuple[str, str, float]]] = {}
+    for theme, data in macro_sentiment.items():
+        for t in data.get("affected_tickers", []):
+            ticker_macro.setdefault(t, []).append(
+                (theme, data.get("label", "NEUTRAL"), float(data.get("score", 0.0)))
+            )
+
+    lines: list[str] = [
+        "WEEKLY PORTFOLIO REVIEW REQUEST",
+        "",
+        "For each holding below, produce a section with 4-5 sentences covering:",
+        "  1. What happened this week (grounded in recent news — use Google Search)",
+        "  2. Current analyst consensus and any price target changes this week",
+        "  3. Whether the investment thesis still holds",
+        "  4. One sentence forward outlook for the coming week",
+        "",
+        "HOLDINGS:",
+    ]
+
+    for ticker, holding in portfolio_state.get("holdings", {}).items():
+        pnl_pct       = holding.get("pnl_pct", 0.0)
+        current_value = holding.get("current_value", 0.0)
+        bucket        = holding.get("bucket", "")
+
+        sent       = sentiment.get(ticker, {})
+        sent_label = sent.get("label", "NEUTRAL")
+        sent_score = float(sent.get("score", 0.0))
+        sent_sum   = sent.get("summary", "No sentiment data.")
+
+        lines.append(f"  {ticker} ({bucket})")
+        lines.append(f"    Current value: ${current_value:,.2f}  P&L: {pnl_pct:+.2f}%")
+        lines.append(f"    Sentiment: {sent_label} ({sent_score:+.2f}) — {sent_sum}")
+
+        for theme, label, score in ticker_macro.get(ticker, []):
+            lines.append(f"    Macro theme: {theme} — {label} ({score:+.2f})")
+
+        lines.append("")
+
+    if performance:
+        seven_day = performance.get("last_7_days_pct")
+        if seven_day is not None:
+            lines.append(f"Portfolio 7-day return: {seven_day:+.2f}%")
+
+    prompt = "\n".join(lines)
+
+    try:
+        response = _gemini_client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=_GEMINI_ANALYSIS_SYSTEM,
+                tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+            ),
+        )
+        return response.text.strip()
+    except Exception as exc:
+        print(f"  ⚠️  Gemini weekly analysis error: {exc}")
+        return "⚠️ Gemini analysis unavailable this week."
+
+
+def get_weekly_sell_recommendations(
+    portfolio_state: dict,
+    triggered_rules: list,
+    sentiment: dict,
+    macro_sentiment: dict,
+) -> str:
+    """Generate HOLD/WATCH/SELL verdicts per position with Irish CGT impact calculations.
+
+    Uses Gemini 3 Flash (no Search — reasoning over supplied data only) to evaluate
+    each position and produce structured sell recommendations with CGT implications
+    under Irish tax rules.
+
+    Args:
+        portfolio_state: Dict as returned by calculate_portfolio().
+        triggered_rules: List of alert dicts from check_rules().
+        sentiment:       Dict of {ticker: {score, label, summary}} from get_all_sentiment().
+        macro_sentiment: Dict of {theme: {score, label, summary, affected_tickers}}
+                         from get_macro_sentiment().
+
+    Returns:
+        Gemini's structured sell recommendations string, or a fallback message on any error.
+    """
+    if not _GEMINI_AVAILABLE:
+        return "⚠️ Sell recommendations unavailable this week."
+
+    existing_tickers = list(portfolio_state.get("holdings", {}).keys())
+
+    lines: list[str] = [
+        "SELL RECOMMENDATION ANALYSIS",
+        "",
+        "For each position below, output one of three verdicts: HOLD, WATCH, or SELL.",
+        "Format output as:",
+        "",
+        "SELL RECOMMENDATIONS:",
+        "[TICKER] — [HOLD|WATCH|SELL]",
+        "  (For SELL only, include:)",
+        "  Reason: 1-2 sentences grounded in sentiment + P&L",
+        "  CGT impact:",
+        "    If loss: 'Selling crystallises a €X loss offsettable against future CGT gains'",
+        "    If gain: 'CGT owed = (proceeds − cost) × 33% = €X. Note: €1,270 annual",
+        "              exemption may reduce this if unused.'",
+        "    Calculate using cost_basis as cost and current_value as proceeds.",
+        "  Suggested replacement (same bucket, not already in the portfolio):",
+        "    Name the ticker and one sentence on why it is better positioned now.",
+        "",
+        f"Existing tickers (do not suggest as replacements): {', '.join(existing_tickers)}",
+        "",
+        "PORTFOLIO HOLDINGS (USD):",
+    ]
+
+    for ticker, holding in portfolio_state.get("holdings", {}).items():
+        cost_basis    = holding.get("cost_basis", 0.0)
+        current_value = holding.get("current_value", 0.0)
+        current_price = holding.get("current_price", 0.0)
+        pnl_pct       = holding.get("pnl_pct", 0.0)
+        pnl_usd       = holding.get("pnl_usd", 0.0)
+        bucket        = holding.get("bucket", "")
+
+        sent       = sentiment.get(ticker, {})
+        sent_label = sent.get("label", "NEUTRAL")
+        sent_score = float(sent.get("score", 0.0))
+
+        lines.append(f"  {ticker} ({bucket})")
+        lines.append(
+            f"    Cost basis: ${cost_basis:,.2f}  "
+            f"Current value: ${current_value:,.2f}  "
+            f"Current price: ${current_price:,.2f}"
+        )
+        lines.append(f"    P&L: {pnl_pct:+.2f}% (${pnl_usd:+,.2f})")
+        lines.append(f"    Sentiment: {sent_label} ({sent_score:+.2f})")
+        lines.append("")
+
+    if macro_sentiment:
+        lines.append("MACRO THEMES:")
+        for theme, data in macro_sentiment.items():
+            lines.append(
+                f"  {theme}: {data.get('label')} ({float(data.get('score', 0.0)):+.2f}) — "
+                f"{data.get('summary', '')}"
+            )
+        lines.append("")
+
+    if triggered_rules:
+        lines.append("TRIGGERED RULES:")
+        for rule in triggered_rules:
+            lines.append(f"  [{rule.get('level')}] {rule.get('message')}")
+        lines.append("")
+
+    prompt = "\n".join(lines)
+
+    try:
+        response = _gemini_client.models.generate_content(
+            model=_GEMINI_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=_GEMINI_SELL_SYSTEM,
+            ),
+        )
+        return response.text.strip()
+    except Exception as exc:
+        print(f"  ⚠️  Gemini sell recommendations error: {exc}")
+        return "⚠️ Sell recommendations unavailable this week."
 
 
 # ── Manual test ────────────────────────────────────────────────
