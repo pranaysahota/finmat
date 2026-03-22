@@ -201,7 +201,7 @@ def run_daily_briefing() -> None:
 
 
 def run_weekly_digest() -> None:
-    """Weekly Sunday 14:00 digest: prices → sentiment → Gemini analysis → sell recs → send.
+    """Weekly Sunday 14:30 digest: prices → sentiment → Gemini analysis → sell recs → send.
 
     Pipeline:
         get_performance_summary  (skips if insufficient history)
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     # Schedule recurring jobs
     schedule.every(PRICE_CHECK_INTERVAL).hours.do(run_price_check)
     schedule.every().day.at(DAILY_BRIEFING_TIME).do(run_daily_briefing)
-    schedule.every().sunday.at("14:00").do(run_weekly_digest)
+    schedule.every().sunday.at("14:30").do(run_weekly_digest)
 
     try:
         while True:
