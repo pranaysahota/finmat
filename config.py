@@ -88,7 +88,7 @@ PATHS = {
 }
 
 # ── Scheduling ───────────────────────────────────────────────
-DAILY_BRIEFING_TIME  = "08:00"  # time to run the full daily briefing (HH:MM)
+DAILY_BRIEFING_TIME  = "13:00"  # time to run the full daily briefing (HH:MM)
 PRICE_CHECK_INTERVAL = 1        # how often to check prices, in hours
 
 # ── Load Private Portfolio ───────────────────────────────────

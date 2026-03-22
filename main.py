@@ -95,7 +95,7 @@ def run_price_check() -> None:
 def run_daily_briefing() -> None:
     """Full morning pipeline.
 
-    Runs every day at DAILY_BRIEFING_TIME (default 08:00) and once on startup.
+    Runs every day at DAILY_BRIEFING_TIME (default 13:00) and once on startup.
     Each step is wrapped individually so a single failure does not abort the
     entire briefing. Safe fallbacks (empty lists / empty dicts) are used when
     a step fails so downstream steps still receive valid input.
@@ -201,7 +201,7 @@ def run_daily_briefing() -> None:
 
 
 def run_weekly_digest() -> None:
-    """Weekly Sunday 09:00 digest: prices → sentiment → Gemini analysis → sell recs → send.
+    """Weekly Sunday 14:00 digest: prices → sentiment → Gemini analysis → sell recs → send.
 
     Pipeline:
         get_performance_summary  (skips if insufficient history)
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     # Schedule recurring jobs
     schedule.every(PRICE_CHECK_INTERVAL).hours.do(run_price_check)
     schedule.every().day.at(DAILY_BRIEFING_TIME).do(run_daily_briefing)
-    schedule.every().sunday.at("09:00").do(run_weekly_digest)
+    schedule.every().sunday.at("14:00").do(run_weekly_digest)
 
     try:
         while True:
