@@ -81,11 +81,13 @@ def _patch_pipeline(**overrides):
         "get_performance_summary": MagicMock(return_value=MOCK_PERFORMANCE),
         "get_all_sentiment":       MagicMock(return_value=MOCK_SENTIMENT),
         "get_macro_sentiment":     MagicMock(return_value={}),
-        "get_decision":            MagicMock(return_value=MOCK_DECISION),
-        "send_daily_briefing":     MagicMock(),
-        "send_critical_alert":     MagicMock(),
-        "send_weekly_digest":      MagicMock(),
-        "load_history":            MagicMock(return_value=[]),
+        "get_decision":                    MagicMock(return_value=MOCK_DECISION),
+        "get_weekly_analysis":             MagicMock(return_value="Gemini analysis text."),
+        "get_weekly_sell_recommendations": MagicMock(return_value="MSFT — HOLD"),
+        "send_daily_briefing":             MagicMock(),
+        "send_critical_alert":             MagicMock(),
+        "send_weekly_email":               MagicMock(),
+        "load_history":                    MagicMock(return_value=[]),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
     stripped = {k.removeprefix("main."): v for k, v in overrides.items()}
@@ -295,11 +297,11 @@ class TestRunDailyBriefing:
 class TestRunWeeklyDigest:
     """run_weekly_digest sends digest when enough history exists."""
 
-    def test_calls_send_weekly_digest_when_performance_available(self):
+    def test_calls_send_weekly_email_when_performance_available(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()
-        mocks["send_weekly_digest"].assert_called_once()
+        mocks["send_weekly_email"].assert_called_once()
 
     def test_skips_digest_when_no_performance_data(self):
         mocks = _patch_pipeline(**{
@@ -307,7 +309,7 @@ class TestRunWeeklyDigest:
         })
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()
-        mocks["send_weekly_digest"].assert_not_called()
+        mocks["send_weekly_email"].assert_not_called()
 
     def test_calls_get_all_prices_for_current_value(self):
         mocks = _patch_pipeline()
@@ -322,11 +324,11 @@ class TestRunWeeklyDigest:
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()  # must not raise
 
-    def test_does_not_call_sentiment_or_decision(self):
+    def test_does_not_call_get_decision(self):
+        """Weekly digest uses get_weekly_analysis, not get_decision."""
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()
-        mocks["get_all_sentiment"].assert_not_called()
         mocks["get_decision"].assert_not_called()
 
 
