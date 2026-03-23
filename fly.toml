@@ -11,7 +11,8 @@ primary_region = "ams"
   strategy = "immediate"
 
 [env]
-  TZ = "Europe/Dublin"
+  TZ       = "Europe/Dublin"
+  LOG_DIR  = "/app/data/logs"
 
 # Persistent volume for portfolio history and trade log.
 # Create once with: fly volumes create finmat_data --region ams --size 1
