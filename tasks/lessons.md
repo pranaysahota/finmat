@@ -39,3 +39,7 @@ Accumulated project-specific lessons. Review this file at the start of each sess
    honour (e.g. "streams line by line" must not wrap the generator in `list()`),
    (e) any class with file I/O must be mocked in tests for the calling module.
    The happy path passing is not sufficient — PR review will find all five.
+
+10. main accepts merges only from dev. Never create a separate branch to resolve
+    a dev→main conflict — resolve it on dev itself (merge main into dev, fix
+    conflict there, push dev, then PR dev→main).
