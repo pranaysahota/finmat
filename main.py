@@ -20,7 +20,9 @@ from modules.alerts import (
     send_daily_briefing,
     send_weekly_email,
 )
+from modules.run_logger import RunLogger, extract_final_signal
 from modules.decision_engine import (
+    build_context,
     get_decision,
     get_weekly_analysis,
     get_weekly_sell_recommendations,
@@ -113,12 +115,22 @@ def run_daily_briefing() -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n[{ts}] ── Daily Briefing started ──")
 
+    # ── Logger ──
+    all_tickers = [t for bucket in PORTFOLIO.values() for t in bucket.keys()]
+    logger = RunLogger()
+    logger.start_run(all_tickers)
+
     # ── 1. Prices ──
     try:
         print(f"[{ts}] Fetching prices…")
         prices = get_all_prices(PORTFOLIO)
+        logger.log_step("fetch", {
+            "tickers":       list(prices.keys()),
+            "data_snapshot": prices,
+        })
     except Exception as exc:
         print(f"[{ts}] Price fetch FAILED: {exc}")
+        logger.finalise("error", f"Price fetch FAILED: {exc}")
         return
 
     # ── 2. Portfolio state ──
@@ -127,6 +139,7 @@ def run_daily_briefing() -> None:
         portfolio_state = calculate_portfolio(prices)
     except Exception as exc:
         print(f"[{ts}] Portfolio calculation FAILED: {exc}")
+        logger.finalise("error", f"Portfolio calculation FAILED: {exc}")
         return
 
     # ── 3. Rules ──
@@ -179,10 +192,20 @@ def run_daily_briefing() -> None:
     # ── 7. Decision ──
     try:
         print(f"[{ts}] Generating decision…")
+        # Build context separately so it can be captured for logging (pure function)
+        context = build_context(
+            portfolio_state, triggered_rules, bucket_drift,
+            macro_sentiment, sentiment, performance,
+        )
         decision = get_decision(
             portfolio_state, triggered_rules, bucket_drift,
             macro_sentiment, sentiment, performance,
         )
+        logger.log_step("analyse", {
+            "prompt_sent":   context,
+            "raw_response":  decision,
+            "parsed_output": {"sentiment": sentiment},
+        })
     except Exception as exc:
         print(f"[{ts}] Decision engine FAILED: {exc}")
         decision = "⚠️ Decision engine unavailable."
@@ -194,9 +217,15 @@ def run_daily_briefing() -> None:
             portfolio_state, decision, triggered_rules, bucket_drift,
             performance, macro_sentiment,
         )
+        logger.log_step("format", {
+            "prompt_sent":  decision,
+            "raw_response": "",
+            "final_signal": extract_final_signal(decision),
+        })
     except Exception as exc:
         print(f"[{ts}] Send FAILED: {exc}")
 
+    logger.finalise("success")
     print(f"[{ts}] ── Daily Briefing complete ──\n")
 
 
