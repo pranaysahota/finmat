@@ -31,3 +31,11 @@ Accumulated project-specific lessons. Review this file at the start of each sess
 8. `get_macro_sentiment` must be included in `_patch_pipeline` in `test_main.py`
    so that `run_daily_briefing()` tests remain isolated and don't make real
    network or API calls.
+
+9. When writing a wrapping layer (logger, middleware, instrumentation), walk
+   every code path for: (a) partial failures that still reach a "success" status,
+   (b) callers who skip initialisation, (c) asymmetric comparison inputs where
+   one side may be empty, (d) docstring contracts that the code must actually
+   honour (e.g. "streams line by line" must not wrap the generator in `list()`),
+   (e) any class with file I/O must be mocked in tests for the calling module.
+   The happy path passing is not sufficient — PR review will find all five.

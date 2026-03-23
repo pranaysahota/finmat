@@ -38,7 +38,7 @@ def _iter_jsonl(path: Path):
 
 
 def _load_diffs_by_run_id() -> dict:
-    """Return a dict of today_run_id → diff_record for all diff records."""
+    """Return a dict of today_run_id → diff_record, streamed line by line."""
     result: dict = {}
     for diff in _iter_jsonl(_DIFFS_FILE):
         run_id = diff.get("today_run_id", "")
@@ -57,9 +57,32 @@ def _sentiment_label_to_signal(label: str) -> str:
     return "hold"
 
 
-def _collect_runs() -> list[dict]:
-    """Read all run records into a list (used for --last / --date lookups)."""
-    return list(_iter_jsonl(_RUNS_FILE))
+def _stream_last_n_dates(n: int) -> list[dict]:
+    """Stream runs.jsonl and return only records for the last N unique calendar dates.
+
+    Reads the file once from start to end. Memory usage is bounded by the
+    number of records in the last N dates, not the full file size.
+    """
+    from collections import OrderedDict
+
+    date_buckets: OrderedDict = OrderedDict()
+    for run in _iter_jsonl(_RUNS_FILE):
+        d = run.get("date", "")
+        if not d:
+            continue
+        if d not in date_buckets:
+            date_buckets[d] = []
+            # Drop the oldest date once we exceed n unique dates
+            while len(date_buckets) > n:
+                date_buckets.popitem(last=False)
+        date_buckets[d].append(run)
+
+    return [r for runs in date_buckets.values() for r in runs]
+
+
+def _stream_date(target_date: str) -> list[dict]:
+    """Stream runs.jsonl and return only records matching the given date."""
+    return [r for r in _iter_jsonl(_RUNS_FILE) if r.get("date") == target_date]
 
 
 def _has_flips(run: dict, diffs_by_run: dict) -> bool:
@@ -155,31 +178,21 @@ def main() -> None:
         sys.exit(0)
 
     diffs_by_run = _load_diffs_by_run_id()
-    all_runs     = _collect_runs()
 
-    if not all_runs:
-        print(f"No run records found in {_RUNS_FILE}")
-        sys.exit(0)
-
-    # ── Filter runs ──
+    # ── Stream only the records we need ──
     if args.date:
-        filtered = [r for r in all_runs if r.get("date") == args.date]
+        filtered = _stream_date(args.date)
         title = f"Date {args.date}"
     elif args.last:
-        # Collect the last N unique calendar dates (most recent first)
-        seen_dates: list[str] = []
-        for run in reversed(all_runs):
-            d = run.get("date", "")
-            if d and d not in seen_dates:
-                seen_dates.append(d)
-            if len(seen_dates) >= args.last:
-                break
-        cutoff = set(seen_dates)
-        filtered = [r for r in all_runs if r.get("date") in cutoff]
+        filtered = _stream_last_n_dates(args.last)
         title = f"Last {args.last} days"
     else:
-        filtered = all_runs
-        title = "All runs"
+        filtered = _stream_last_n_dates(30)
+        title = "Last 30 days"
+
+    if not filtered:
+        print(f"No run records found in {_RUNS_FILE}")
+        sys.exit(0)
 
     # ── Apply --flips-only ──
     if args.flips_only:

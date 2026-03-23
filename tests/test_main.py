@@ -88,6 +88,8 @@ def _patch_pipeline(**overrides):
         "send_critical_alert":             MagicMock(),
         "send_weekly_email":               MagicMock(),
         "load_history":                    MagicMock(return_value=[]),
+        # Prevent RunLogger from writing to disk during pipeline tests
+        "RunLogger":                       MagicMock(),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
     stripped = {k.removeprefix("main."): v for k, v in overrides.items()}

@@ -225,13 +225,30 @@ def _compute_and_write_diff(run_id: str, run_date: str, steps: dict) -> None:
         )
 
         signal_changes: list[dict] = []
-        for ticker, today_s in today_sentiment.items():
-            if ticker not in yesterday_sentiment:
+        all_tickers = sorted(
+            set(today_sentiment.keys()) | set(yesterday_sentiment.keys())
+        )
+        for ticker in all_tickers:
+            today_s = today_sentiment.get(ticker)
+            yest_s  = yesterday_sentiment.get(ticker)
+
+            # One side missing — comparison is incomplete for this ticker
+            if today_s is None or yest_s is None:
+                signal_changes.append({
+                    "ticker":               ticker,
+                    "yesterday":            _sentiment_label_to_signal(
+                        yest_s.get("label", "NEUTRAL")
+                    ) if yest_s is not None else None,
+                    "today":                _sentiment_label_to_signal(
+                        today_s.get("label", "NEUTRAL")
+                    ) if today_s is not None else None,
+                    "flipped":              False,
+                    "comparison_incomplete": True,
+                })
                 continue
+
             today_sig = _sentiment_label_to_signal(today_s.get("label", "NEUTRAL"))
-            yest_sig  = _sentiment_label_to_signal(
-                yesterday_sentiment[ticker].get("label", "NEUTRAL")
-            )
+            yest_sig  = _sentiment_label_to_signal(yest_s.get("label",  "NEUTRAL"))
             if today_sig != yest_sig:
                 signal_changes.append({
                     "ticker":    ticker,
@@ -260,13 +277,20 @@ def _compute_and_write_diff(run_id: str, run_date: str, steps: dict) -> None:
         snap_diff = _compute_snapshot_diff(yesterday_snapshot, today_snapshot)
 
         # ── Summary string ──
-        flipped_count = len(signal_changes)
-        if flipped_count == 0:
+        actual_flips = [c for c in signal_changes if c.get("flipped")]
+        incomplete   = [c for c in signal_changes if c.get("comparison_incomplete")]
+        flipped_count = len(actual_flips)
+        if flipped_count == 0 and not incomplete:
             summary = "No signal changes vs yesterday."
+        elif flipped_count == 0 and incomplete:
+            summary = (
+                f"No signal changes vs yesterday "
+                f"({len(incomplete)} ticker(s) had incomplete sentiment data)."
+            )
         else:
             examples = ", ".join(
                 f"{c['ticker']} {c['yesterday']}→{c['today']}"
-                for c in signal_changes[:3]
+                for c in actual_flips[:3]
             )
             summary = f"{flipped_count} signal(s) changed since yesterday. {examples}."
 
@@ -362,6 +386,9 @@ class RunLogger:
             status: "success" or "error".
             error:  Error message string, or None when status is "success".
         """
+        if not self._run_id:
+            print("RunLogger.finalise called without start_run — skipping", file=sys.stderr)
+            return
         try:
             record: dict = {
                 "run_id":    self._run_id,

@@ -224,6 +224,12 @@ def run_daily_briefing() -> None:
         })
     except Exception as exc:
         print(f"[{ts}] Send FAILED: {exc}")
+        logger.log_step("format", {
+            "prompt_sent":  decision,
+            "raw_response": "",
+            "final_signal": extract_final_signal(decision),
+            "error":        str(exc),
+        })
 
     logger.finalise("success")
     print(f"[{ts}] ── Daily Briefing complete ──\n")
