@@ -329,6 +329,39 @@ and re-plan before continuing. Do not keep pushing in the wrong direction.
 
 ---
 
+## Edge Case Reasoning — Ask "What If This Step Fails?"
+
+When writing any wrapping layer (logger, middleware, instrumentation, retry
+handler), the happy path is not enough. Systematically ask the following
+questions for **every code path**:
+
+1. **Partial failure**: If a step inside the wrapped block raises, does the
+   wrapper still report the correct status? A `finalise("success")` that runs
+   unconditionally after a failed send is a silent lie in the log record.
+
+2. **Missing initialisation**: If the caller skips the setup step (e.g.
+   `start_run()`), does the later step (`finalise()`) silently write a corrupt
+   record, or does it detect and reject the call?
+
+3. **Asymmetric inputs**: If you're comparing two datasets (today vs yesterday),
+   what happens when one side is empty or partial? Iterating only `today.items()`
+   silently drops any ticker that was present yesterday but missing today —
+   producing a false "no changes" result instead of flagging incompleteness.
+
+4. **Docstring–code contracts**: If the docstring says "never loads whole file
+   into memory", the code must actually stream. A `list()` wrapper around a
+   generator breaks that contract invisibly. Read the code, not just the comment.
+
+5. **Test isolation**: Any class that does file I/O must be mocked in tests that
+   exercise the calling module. If `RunLogger` writes to `logs/` and is not
+   mocked in `test_main.py`, every pipeline test creates disk artifacts.
+
+The root cause of all five gaps found in the observability PR review was the
+same: the happy path was verified, but the failure paths were not walked through
+systematically. Apply this checklist to every new wrapping layer.
+
+---
+
 ## What Not To Do
 
 - Do not add ETF tickers to the portfolio
