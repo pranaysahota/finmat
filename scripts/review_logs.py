@@ -194,6 +194,7 @@ def main() -> None:
         print(f"No run records found in {_RUNS_FILE}")
         sys.exit(0)
 
+
     # ── Apply --flips-only ──
     if args.flips_only:
         filtered = [r for r in filtered if _has_flips(r, diffs_by_run)]

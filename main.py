@@ -387,9 +387,8 @@ if __name__ == "__main__":
             "when first purchase is made"
         )
 
-    run_daily_briefing()
-
     if run_once:
+        run_daily_briefing()
         sys.exit(0)
 
     # Schedule recurring jobs
