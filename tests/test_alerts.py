@@ -115,6 +115,45 @@ class TestSendMessage:
         called_url = mock_post.call_args.args[0]
         assert "mytoken123" in called_url
 
+    def test_long_message_split_into_multiple_posts(self):
+        """A message exceeding 4096 chars is sent as multiple POST requests."""
+        long_text = "\n".join([f"line {i}" for i in range(500)])  # well over 4096 chars
+        with patch("modules.alerts.requests.post", return_value=_http_ok()) as mock_post:
+            result = send_message(long_text)
+        assert mock_post.call_count > 1
+        assert result is True
+
+    def test_each_chunk_within_limit(self):
+        """Every chunk sent to Telegram must be ≤ 4096 characters."""
+        long_text = "\n".join([f"line {i}: {'x' * 20}" for i in range(300)])
+        sent_chunks: list[str] = []
+        def fake_post(url, json, timeout):
+            sent_chunks.append(json["text"])
+            return _http_ok()
+        with patch("modules.alerts.requests.post", side_effect=fake_post):
+            send_message(long_text)
+        for chunk in sent_chunks:
+            assert len(chunk) <= 4096, f"Chunk too long: {len(chunk)}"
+
+    def test_short_message_single_post(self):
+        """A message under 4096 chars is sent in a single POST."""
+        with patch("modules.alerts.requests.post", return_value=_http_ok()) as mock_post:
+            send_message("short message")
+        assert mock_post.call_count == 1
+
+    def test_returns_false_if_any_chunk_fails(self):
+        """Returns False if any chunk in a multi-part send fails."""
+        long_text = "\n".join([f"line {i}" for i in range(500)])
+        call_count = [0]
+        def fail_second(url, json, timeout):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise Exception("network error")
+            return _http_ok()
+        with patch("modules.alerts.requests.post", side_effect=fail_second):
+            result = send_message(long_text)
+        assert result is False
+
 
 # ── send_daily_briefing ───────────────────────────────────────
 
