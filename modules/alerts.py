@@ -19,11 +19,47 @@ from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 
 
+_TELEGRAM_MAX_CHARS = 4096
+
+
+def _split_message(text: str) -> list[str]:
+    """Split text into chunks of at most _TELEGRAM_MAX_CHARS, breaking on newlines.
+
+    Args:
+        text: The full message text to split.
+
+    Returns:
+        List of chunks, each ≤ _TELEGRAM_MAX_CHARS characters.
+    """
+    if len(text) <= _TELEGRAM_MAX_CHARS:
+        return [text]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for line in text.split("\n"):
+        # +1 for the newline that will rejoin them
+        line_len = len(line) + 1
+        if current_len + line_len > _TELEGRAM_MAX_CHARS and current:
+            chunks.append("\n".join(current))
+            current = []
+            current_len = 0
+        current.append(line)
+        current_len += line_len
+
+    if current:
+        chunks.append("\n".join(current))
+
+    return chunks
+
+
 def send_message(text: str) -> bool:
     """Send an HTML-formatted message to the configured Telegram chat.
 
-    POSTs to the Telegram Bot API. Never raises an exception — any failure
-    is printed and returns False so the caller can continue.
+    If the message exceeds Telegram's 4096-character limit it is split into
+    multiple messages on newline boundaries. Never raises an exception — any
+    failure is printed and returns False so the caller can continue.
 
     Args:
         text: Message text. Supports Telegram HTML: <b>bold</b>, <i>italic</i>.
@@ -31,21 +67,24 @@ def send_message(text: str) -> bool:
               being embedded in the text.
 
     Returns:
-        True if the message was delivered (HTTP 200), False otherwise.
+        True if all chunks were delivered (HTTP 200), False if any chunk failed.
     """
     url = TELEGRAM_API.format(token=TELEGRAM_BOT_TOKEN)
-    payload = {
-        "chat_id":    TELEGRAM_CHAT_ID,
-        "text":       text,
-        "parse_mode": "HTML",
-    }
-    try:
-        response = requests.post(url, json=payload, timeout=10)
-        response.raise_for_status()
-        return True
-    except Exception as exc:
-        print(f"  ⚠️  Telegram send failed: {exc}")
-        return False
+    chunks = _split_message(text)
+    success = True
+    for chunk in chunks:
+        payload = {
+            "chat_id":    TELEGRAM_CHAT_ID,
+            "text":       chunk,
+            "parse_mode": "HTML",
+        }
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+            response.raise_for_status()
+        except Exception as exc:
+            print(f"  ⚠️  Telegram send failed: {exc}")
+            success = False
+    return success
 
 
 def send_daily_briefing(
