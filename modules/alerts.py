@@ -54,12 +54,37 @@ def _split_message(text: str) -> list[str]:
     return chunks
 
 
+def _send_error_notification(error_summary: str) -> None:
+    """Send a plain-text error notification to Telegram without HTML parsing.
+
+    Used as a last-resort fallback when a normal send_message call fails with a
+    400, so the user is actively notified on Telegram rather than only in logs.
+    Sends directly via requests — never calls send_message to avoid recursion.
+
+    Args:
+        error_summary: Short description of the failure (no HTML).
+    """
+    url = TELEGRAM_API.format(token=TELEGRAM_BOT_TOKEN)
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text":    f"[Finance Agent] Telegram send failed: {error_summary}",
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception:
+        pass  # Nothing left to do if the error notification itself fails
+
+
 def send_message(text: str) -> bool:
     """Send an HTML-formatted message to the configured Telegram chat.
 
     If the message exceeds Telegram's 4096-character limit it is split into
     multiple messages on newline boundaries. Never raises an exception — any
     failure is printed and returns False so the caller can continue.
+
+    If a chunk fails with HTTP 400 (e.g. a single line longer than the limit),
+    a plain-text error notification is sent to Telegram so the failure is
+    visible actively rather than only in server logs.
 
     Args:
         text: Message text. Supports Telegram HTML: <b>bold</b>, <i>italic</i>.
@@ -72,7 +97,7 @@ def send_message(text: str) -> bool:
     url = TELEGRAM_API.format(token=TELEGRAM_BOT_TOKEN)
     chunks = _split_message(text)
     success = True
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
         payload = {
             "chat_id":    TELEGRAM_CHAT_ID,
             "text":       chunk,
@@ -81,6 +106,16 @@ def send_message(text: str) -> bool:
         try:
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
+        except requests.HTTPError as exc:
+            print(f"  ⚠️  Telegram send failed: {exc}")
+            success = False
+            if response.status_code == 400:
+                try:
+                    detail = response.json().get("description", "unknown 400 error")
+                except Exception:
+                    detail = "unknown 400 error"
+                chunk_info = f"chunk {i + 1}/{len(chunks)}" if len(chunks) > 1 else "message"
+                _send_error_notification(f"HTTP 400 on {chunk_info} — {detail}")
         except Exception as exc:
             print(f"  ⚠️  Telegram send failed: {exc}")
             success = False
