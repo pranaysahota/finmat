@@ -21,6 +21,6 @@ primary_region = "ams"
   destination = "/app/data"
 
 [[vm]]
-  memory = "256mb"
+  memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
