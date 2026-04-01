@@ -1,4 +1,4 @@
-"""Entry point — wires all modules together, runs price checks and daily briefings on a schedule."""
+"""Entry point — wires all modules together, runs daily CRITICAL price checks and weekly digest on a schedule."""
 
 import html
 from datetime import datetime, timedelta
@@ -13,27 +13,20 @@ import modules.portfolio as portfolio_mod
 
 from config import (
     CRYPTO_ACTIVE,
-    DAILY_BRIEFING_TIME,
     PORTFOLIO,
-    PRICE_CHECK_INTERVAL,
     load_portfolio,
 )
 from modules.alerts import (
     send_critical_alert,
-    send_daily_briefing,
     send_weekly_email,
 )
-from modules.run_logger import RunLogger, extract_final_signal
 from modules.decision_engine import (
-    build_context,
-    get_decision,
     get_weekly_analysis,
     get_weekly_sell_recommendations,
 )
 from modules.history import (
     get_performance_summary,
     load_history,
-    save_snapshot,
 )
 from modules.news_sentiment import get_all_sentiment, get_macro_sentiment
 from modules.portfolio import (
@@ -98,150 +91,6 @@ def run_price_check() -> None:
 
     except Exception as exc:
         print(f"[{ts}] Price check FAILED: {exc}")
-
-
-def run_daily_briefing() -> None:
-    """Full morning pipeline.
-
-    Runs every day at DAILY_BRIEFING_TIME (default 13:00) and once on startup.
-    Each step is wrapped individually so a single failure does not abort the
-    entire briefing. Safe fallbacks (empty lists / empty dicts) are used when
-    a step fails so downstream steps still receive valid input.
-
-    Pipeline:
-        get_all_prices
-        → calculate_portfolio
-        → check_rules + check_bucket_drift
-        → save_snapshot
-        → get_performance_summary
-        → get_all_sentiment  (stocks only)
-        → get_decision
-        → send_daily_briefing
-    """
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
-    print(f"\n[{ts}] ── Daily Briefing started ──")
-
-    portfolio = load_portfolio()
-    portfolio_mod.PORTFOLIO = portfolio
-
-    # ── Logger ──
-    all_tickers = [t for bucket in portfolio.values() for t in bucket.keys()]
-    logger = RunLogger()
-    logger.start_run(all_tickers)
-
-    # ── 1. Prices ──
-    try:
-        print(f"[{ts}] Fetching prices…")
-        prices = get_all_prices(portfolio)
-        logger.log_step("fetch", {
-            "tickers":       list(prices.keys()),
-            "data_snapshot": prices,
-        })
-    except Exception as exc:
-        print(f"[{ts}] Price fetch FAILED: {exc}")
-        logger.finalise("error", f"Price fetch FAILED: {exc}")
-        return
-
-    # ── 2. Portfolio state ──
-    try:
-        print(f"[{ts}] Calculating portfolio…")
-        portfolio_state = calculate_portfolio(prices)
-    except Exception as exc:
-        print(f"[{ts}] Portfolio calculation FAILED: {exc}")
-        logger.finalise("error", f"Portfolio calculation FAILED: {exc}")
-        return
-
-    # ── 3. Rules ──
-    try:
-        triggered_rules = check_rules(portfolio_state)
-        bucket_drift    = check_bucket_drift(portfolio_state)
-        print(f"[{ts}] Rules checked — {len(triggered_rules)} triggered")
-    except Exception as exc:
-        print(f"[{ts}] Rules check FAILED: {exc}")
-        triggered_rules = []
-        bucket_drift    = []
-
-    # ── 4. Snapshot ──
-    try:
-        print(f"[{ts}] Saving snapshot…")
-        save_snapshot(portfolio_state)
-    except Exception as exc:
-        print(f"[{ts}] Snapshot save FAILED: {exc}")
-
-    # ── 5. Performance ──
-    try:
-        print(f"[{ts}] Loading performance summary…")
-        performance = get_performance_summary()
-    except Exception as exc:
-        print(f"[{ts}] Performance summary FAILED: {exc}")
-        performance = {}
-
-    # ── 6. Sentiment (stocks only) ──
-    try:
-        stock_tickers = [
-            ticker
-            for bucket, holdings in portfolio.items()
-            for ticker, asset in holdings.items()
-            if asset.get("type") == "stock"
-        ]
-        print(f"[{ts}] Running sentiment for {len(stock_tickers)} stock tickers…")
-        sentiment = get_all_sentiment(stock_tickers)
-    except Exception as exc:
-        print(f"[{ts}] Sentiment FAILED: {exc}")
-        sentiment = {}
-
-    # ── 6b. Macro sentiment (cross-position themes) ──
-    try:
-        print(f"[{ts}] Running macro sentiment…")
-        macro_sentiment = get_macro_sentiment(portfolio_state)
-    except Exception as exc:
-        print(f"[{ts}] Macro sentiment FAILED: {exc}")
-        macro_sentiment = {}
-
-    # ── 7. Decision ──
-    try:
-        print(f"[{ts}] Generating decision…")
-        # Build context separately so it can be captured for logging (pure function)
-        context = build_context(
-            portfolio_state, triggered_rules, bucket_drift,
-            macro_sentiment, sentiment, performance,
-        )
-        decision = get_decision(
-            portfolio_state, triggered_rules, bucket_drift,
-            macro_sentiment, sentiment, performance,
-        )
-        logger.log_step("analyse", {
-            "prompt_sent":   context,
-            "raw_response":  decision,
-            "parsed_output": {"sentiment": sentiment},
-        })
-    except Exception as exc:
-        print(f"[{ts}] Decision engine FAILED: {exc}")
-        decision = "⚠️ Decision engine unavailable."
-
-    # ── 8. Send ──
-    try:
-        print(f"[{ts}] Sending daily briefing…")
-        send_daily_briefing(
-            portfolio_state, decision, triggered_rules, bucket_drift,
-            performance, macro_sentiment,
-        )
-        logger.log_step("format", {
-            "prompt_sent":  decision,
-            "raw_response": "",
-            "final_signal": extract_final_signal(decision),
-        })
-    except Exception as exc:
-        print(f"[{ts}] Send FAILED: {exc}")
-        logger.log_step("format", {
-            "prompt_sent":  decision,
-            "raw_response": "",
-            "final_signal": extract_final_signal(decision),
-            "error":        str(exc),
-        })
-
-    logger.finalise("success")
-    print(f"[{ts}] ── Daily Briefing complete ──\n")
 
 
 def run_weekly_digest() -> None:
@@ -400,12 +249,11 @@ if __name__ == "__main__":
         )
 
     if run_once:
-        run_daily_briefing()
+        run_weekly_digest()
         sys.exit(0)
 
     # Schedule recurring jobs
-    schedule.every(PRICE_CHECK_INTERVAL).hours.do(run_price_check)
-    schedule.every().day.at(DAILY_BRIEFING_TIME).do(run_daily_briefing)
+    schedule.every().day.at("13:00").do(run_price_check)   # CRITICAL-only daily check
     schedule.every().sunday.at("14:30").do(run_weekly_digest)
 
     try:

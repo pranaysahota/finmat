@@ -88,10 +88,6 @@ PATHS = {
     "TRADES_FILE":  Path("data/trades.json"),              # permanent trade log (appended by trade.py)
 }
 
-# ── Scheduling ───────────────────────────────────────────────
-DAILY_BRIEFING_TIME  = "13:00"  # time to run the full daily briefing (HH:MM)
-PRICE_CHECK_INTERVAL = 1        # how often to check prices, in hours
-
 # ── Load Private Portfolio ───────────────────────────────────
 # portfolio/local.py is gitignored and holds your real holdings.
 # It is never committed. See portfolio/local.example.py for the structure.
@@ -131,5 +127,5 @@ except FileNotFoundError:
 # modules/history.py          → PATHS
 # trade.py                    → PATHS
 # modules/price_fetcher.py    → CRYPTO_ACTIVE
-# main.py                     → PORTFOLIO, RULES, PATHS, DAILY_BRIEFING_TIME, PRICE_CHECK_INTERVAL
+# main.py                     → PORTFOLIO, RULES, PATHS, load_portfolio, CRYPTO_ACTIVE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -6,7 +6,7 @@ All downstream modules are mocked; no real prices, API, or Telegram calls are ma
 import sys
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -65,31 +65,24 @@ MOCK_SENTIMENT = {
     "MSFT": {"score": 0.6, "label": "BULLISH", "summary": "Strong AI growth."},
 }
 
-MOCK_DECISION = "MARKET MOOD: Bullish.\n\nPORTFOLIO STATUS: All good."
-
 # ── Patch helpers ─────────────────────────────────────────────
 
 def _patch_pipeline(**overrides):
     """Return a dict of attribute-name → mock for use with patch.multiple('main', ...)."""
     defaults = {
-        "is_market_open":          MagicMock(return_value=True),
-        "get_all_prices":          MagicMock(return_value=MOCK_PRICES),
-        "calculate_portfolio":     MagicMock(return_value=MOCK_STATE),
-        "check_rules":             MagicMock(return_value=[]),
-        "check_bucket_drift":      MagicMock(return_value=[]),
-        "save_snapshot":           MagicMock(),
-        "get_performance_summary": MagicMock(return_value=MOCK_PERFORMANCE),
-        "get_all_sentiment":       MagicMock(return_value=MOCK_SENTIMENT),
-        "get_macro_sentiment":     MagicMock(return_value={}),
-        "get_decision":                    MagicMock(return_value=MOCK_DECISION),
+        "is_market_open":                  MagicMock(return_value=True),
+        "get_all_prices":                  MagicMock(return_value=MOCK_PRICES),
+        "calculate_portfolio":             MagicMock(return_value=MOCK_STATE),
+        "check_rules":                     MagicMock(return_value=[]),
+        "check_bucket_drift":              MagicMock(return_value=[]),
+        "get_performance_summary":         MagicMock(return_value=MOCK_PERFORMANCE),
+        "get_all_sentiment":               MagicMock(return_value=MOCK_SENTIMENT),
+        "get_macro_sentiment":             MagicMock(return_value={}),
         "get_weekly_analysis":             MagicMock(return_value="Gemini analysis text."),
         "get_weekly_sell_recommendations": MagicMock(return_value="MSFT — HOLD"),
-        "send_daily_briefing":             MagicMock(),
         "send_critical_alert":             MagicMock(),
         "send_weekly_email":               MagicMock(),
         "load_history":                    MagicMock(return_value=[]),
-        # Prevent RunLogger from writing to disk during pipeline tests
-        "RunLogger":                       MagicMock(),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
     stripped = {k.removeprefix("main."): v for k, v in overrides.items()}
@@ -145,12 +138,6 @@ class TestRunPriceCheck:
             main.run_price_check()
         mocks["send_critical_alert"].assert_not_called()
 
-    def test_does_not_save_snapshot(self):
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_price_check()
-        mocks["save_snapshot"].assert_not_called()
-
     def test_does_not_call_sentiment(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
@@ -175,122 +162,6 @@ class TestRunPriceCheck:
         with patch.multiple("main", **mocks):
             main.run_price_check()
         assert mocks["send_critical_alert"].call_count == 2
-
-
-# ── run_daily_briefing ────────────────────────────────────────
-
-
-class TestRunDailyBriefing:
-    """run_daily_briefing runs the full pipeline in order."""
-
-    def test_calls_all_pipeline_steps(self):
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        mocks["get_all_prices"].assert_called_once()
-        mocks["calculate_portfolio"].assert_called_once()
-        mocks["check_rules"].assert_called_once()
-        mocks["check_bucket_drift"].assert_called_once()
-        mocks["save_snapshot"].assert_called_once()
-        mocks["get_performance_summary"].assert_called_once()
-        mocks["get_all_sentiment"].assert_called_once()
-        mocks["get_decision"].assert_called_once()
-        mocks["send_daily_briefing"].assert_called_once()
-
-    def test_snapshot_saved_before_sentiment(self):
-        """save_snapshot must be called before get_all_sentiment."""
-        call_order: list[str] = []
-
-        mocks = _patch_pipeline()
-        mocks["save_snapshot"]      = MagicMock(side_effect=lambda *a: call_order.append("snapshot"))
-        mocks["get_all_sentiment"]  = MagicMock(side_effect=lambda *a: call_order.append("sentiment") or MOCK_SENTIMENT)
-
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        assert call_order.index("snapshot") < call_order.index("sentiment")
-
-    def test_sentiment_only_for_stock_tickers(self):
-        """Only stock tickers (not crypto) are passed to get_all_sentiment."""
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        called_tickers = mocks["get_all_sentiment"].call_args.args[0]
-        # All tickers passed should be stocks — i.e., none of the known crypto ids
-        crypto_ids = {"bitcoin", "ethereum"}
-        for t in called_tickers:
-            assert t not in crypto_ids, f"Crypto ticker {t} should not be in sentiment call"
-
-    def test_continues_after_sentiment_failure(self):
-        """If sentiment raises, briefing still completes and sends."""
-        mocks = _patch_pipeline(**{
-            "main.get_all_sentiment": MagicMock(side_effect=Exception("API down")),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        mocks["send_daily_briefing"].assert_called_once()
-
-    def test_continues_after_snapshot_failure(self):
-        mocks = _patch_pipeline(**{
-            "main.save_snapshot": MagicMock(side_effect=Exception("disk full")),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        # Pipeline should still reach send_daily_briefing
-        mocks["send_daily_briefing"].assert_called_once()
-
-    def test_continues_after_decision_failure(self):
-        mocks = _patch_pipeline(**{
-            "main.get_decision": MagicMock(side_effect=Exception("Claude down")),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        mocks["send_daily_briefing"].assert_called_once()
-
-    def test_returns_early_when_prices_fail(self):
-        """If price fetch fails, nothing downstream is called."""
-        mocks = _patch_pipeline(**{
-            "main.get_all_prices": MagicMock(side_effect=Exception("no network")),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        mocks["calculate_portfolio"].assert_not_called()
-        mocks["send_daily_briefing"].assert_not_called()
-
-    def test_returns_early_when_portfolio_calc_fails(self):
-        mocks = _patch_pipeline(**{
-            "main.calculate_portfolio": MagicMock(side_effect=Exception("bad data")),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        mocks["save_snapshot"].assert_not_called()
-        mocks["send_daily_briefing"].assert_not_called()
-
-    def test_decision_receives_portfolio_state_and_rules(self):
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        args = mocks["get_decision"].call_args.args
-        assert args[0] == MOCK_STATE   # portfolio_state
-        assert args[1] == []            # triggered_rules (empty from mock)
-
-    def test_send_daily_briefing_receives_decision_text(self):
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_daily_briefing()
-
-        kwargs = mocks["send_daily_briefing"].call_args
-        # decision is second positional argument
-        called_decision = kwargs.args[1] if kwargs.args else kwargs.kwargs.get("decision")
-        assert called_decision == MOCK_DECISION
 
 
 # ── run_weekly_digest ─────────────────────────────────────────
@@ -325,13 +196,6 @@ class TestRunWeeklyDigest:
         })
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()  # must not raise
-
-    def test_does_not_call_get_decision(self):
-        """Weekly digest uses get_weekly_analysis, not get_decision."""
-        mocks = _patch_pipeline()
-        with patch.multiple("main", **mocks):
-            main.run_weekly_digest()
-        mocks["get_decision"].assert_not_called()
 
 
 # ── is_market_open ────────────────────────────────────────────
