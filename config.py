@@ -16,6 +16,7 @@ Portfolio holdings live in portfolio/local.py (gitignored).
 #                  All positions subject to Irish CGT at 33% on actual disposal only.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+import importlib.util
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -94,9 +95,25 @@ PRICE_CHECK_INTERVAL = 1        # how often to check prices, in hours
 # ── Load Private Portfolio ───────────────────────────────────
 # portfolio/local.py is gitignored and holds your real holdings.
 # It is never committed. See portfolio/local.example.py for the structure.
+
+_PORTFOLIO_FILE = Path(__file__).parent / "portfolio" / "local.py"
+
+
+def load_portfolio() -> dict:
+    """Load PORTFOLIO fresh from portfolio/local.py on every call.
+
+    Use this at the start of each pipeline run to pick up trades logged
+    via trade.py without requiring a process restart.
+    """
+    spec = importlib.util.spec_from_file_location("portfolio_local_fresh", _PORTFOLIO_FILE)
+    mod  = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.PORTFOLIO
+
+
 try:
-    from portfolio.local import PORTFOLIO
-except ModuleNotFoundError:
+    PORTFOLIO = load_portfolio()
+except FileNotFoundError:
     raise SystemExit(
         "\n❌ portfolio/local.py not found.\n"
         "Copy portfolio/local.example.py → portfolio/local.py "

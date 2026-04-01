@@ -112,24 +112,24 @@ def get_performance_summary() -> dict:
     first  = history[0]
     latest = history[-1]
 
-    # Since inception
-    since_inception_usd = round(latest["total_value"] - first["total_value"], 2)
-    since_inception_pct = round(
-        (since_inception_usd / first["total_value"]) * 100, 2
-    ) if first["total_value"] else 0.0
+    # Since inception — use cost-adjusted P&L, not value vs first snapshot.
+    # Comparing total_value snapshots inflates the figure when new capital is
+    # deployed (new positions added), because the capital addition itself shows
+    # up as a "gain". total_pnl already nets out cost basis correctly.
+    since_inception_usd = latest["total_pnl_usd"]
+    since_inception_pct = latest["total_pnl_pct"]
 
-    # Last 7 days
+    # Last 7 days — measure change in P&L relative to 7-days-ago cost basis.
     seven_days_ago_str = (
         datetime.strptime(latest["date"], "%Y-%m-%d") - timedelta(days=7)
     ).strftime("%Y-%m-%d")
     seven_days_snap    = get_snapshot_by_date(seven_days_ago_str)
 
     last_7_days_pct: float | None = None
-    if seven_days_snap and seven_days_snap["total_value"]:
+    if seven_days_snap and seven_days_snap.get("total_cost"):
+        pnl_change = latest["total_pnl_usd"] - seven_days_snap["total_pnl_usd"]
         last_7_days_pct = round(
-            ((latest["total_value"] - seven_days_snap["total_value"])
-             / seven_days_snap["total_value"]) * 100,
-            2,
+            (pnl_change / seven_days_snap["total_cost"]) * 100, 2
         )
 
     # Best and worst performer from the latest snapshot

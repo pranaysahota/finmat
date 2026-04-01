@@ -227,15 +227,16 @@ class TestGetPerformanceSummary:
             json.dumps([SNAPSHOT_A, SNAPSHOT_B])
         )
         summary = get_performance_summary()
-        assert summary["since_inception_usd"] == round(11000.00 - 10000.00, 2)
+        # Uses latest total_pnl_usd — cost-adjusted, unaffected by new capital additions
+        assert summary["since_inception_usd"] == SNAPSHOT_B["total_pnl_usd"]
 
     def test_since_inception_pct_correct(self, tmp_path):
         (tmp_path / "portfolio_history.json").write_text(
             json.dumps([SNAPSHOT_A, SNAPSHOT_B])
         )
         summary = get_performance_summary()
-        expected = round((1000.00 / 10000.00) * 100, 2)
-        assert summary["since_inception_pct"] == expected
+        # Uses latest total_pnl_pct — cost-adjusted, unaffected by new capital additions
+        assert summary["since_inception_pct"] == SNAPSHOT_B["total_pnl_pct"]
 
     def test_last_7_days_pct_none_when_no_7_day_snapshot(self, tmp_path):
         """Snapshots A→B are 9 days apart — no exact 7-days-ago match."""
@@ -257,7 +258,10 @@ class TestGetPerformanceSummary:
             json.dumps([SNAPSHOT_A, seven_days_snap, SNAPSHOT_B])
         )
         summary = get_performance_summary()
-        expected = round((11000.00 - 10500.00) / 10500.00 * 100, 2)
+        # pnl_change = SNAPSHOT_B.total_pnl_usd - seven_days_snap.total_pnl_usd
+        # seven_days_snap inherits total_pnl_usd=500.00, total_cost=9500.00 from SNAPSHOT_A
+        pnl_change = SNAPSHOT_B["total_pnl_usd"] - seven_days_snap["total_pnl_usd"]
+        expected   = round(pnl_change / seven_days_snap["total_cost"] * 100, 2)
         assert summary["last_7_days_pct"] == expected
 
     def test_best_performer_is_highest_pnl_pct(self, tmp_path):
