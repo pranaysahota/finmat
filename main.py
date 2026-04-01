@@ -9,11 +9,14 @@ from zoneinfo import ZoneInfo
 import schedule
 import time
 
+import modules.portfolio as portfolio_mod
+
 from config import (
     CRYPTO_ACTIVE,
     DAILY_BRIEFING_TIME,
     PORTFOLIO,
     PRICE_CHECK_INTERVAL,
+    load_portfolio,
 )
 from modules.alerts import (
     send_critical_alert,
@@ -77,8 +80,11 @@ def run_price_check() -> None:
         print(f"[{ts}] ⏸  Market closed — skipping price check ({now_et.strftime('%A %H:%M')} ET)")
         return
 
+    portfolio = load_portfolio()
+    portfolio_mod.PORTFOLIO = portfolio
+
     try:
-        prices          = get_all_prices(PORTFOLIO)
+        prices          = get_all_prices(portfolio)
         portfolio_state = calculate_portfolio(prices)
         triggered_rules = check_rules(portfolio_state)
         bucket_drift    = check_bucket_drift(portfolio_state)
@@ -115,15 +121,18 @@ def run_daily_briefing() -> None:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n[{ts}] ── Daily Briefing started ──")
 
+    portfolio = load_portfolio()
+    portfolio_mod.PORTFOLIO = portfolio
+
     # ── Logger ──
-    all_tickers = [t for bucket in PORTFOLIO.values() for t in bucket.keys()]
+    all_tickers = [t for bucket in portfolio.values() for t in bucket.keys()]
     logger = RunLogger()
     logger.start_run(all_tickers)
 
     # ── 1. Prices ──
     try:
         print(f"[{ts}] Fetching prices…")
-        prices = get_all_prices(PORTFOLIO)
+        prices = get_all_prices(portfolio)
         logger.log_step("fetch", {
             "tickers":       list(prices.keys()),
             "data_snapshot": prices,
@@ -171,7 +180,7 @@ def run_daily_briefing() -> None:
     try:
         stock_tickers = [
             ticker
-            for bucket, holdings in PORTFOLIO.items()
+            for bucket, holdings in portfolio.items()
             for ticker, asset in holdings.items()
             if asset.get("type") == "stock"
         ]
@@ -265,8 +274,11 @@ def run_weekly_digest() -> None:
         return
 
     # ── 2. Prices + portfolio state + rules ──
+    portfolio = load_portfolio()
+    portfolio_mod.PORTFOLIO = portfolio
+
     try:
-        prices          = get_all_prices(PORTFOLIO)
+        prices          = get_all_prices(portfolio)
         portfolio_state = calculate_portfolio(prices)
         triggered_rules = check_rules(portfolio_state)
     except Exception as exc:
@@ -281,7 +293,7 @@ def run_weekly_digest() -> None:
     try:
         stock_tickers = [
             ticker
-            for bucket, holdings in PORTFOLIO.items()
+            for bucket, holdings in portfolio.items()
             for ticker, asset in holdings.items()
             if asset.get("type") == "stock"
         ]
