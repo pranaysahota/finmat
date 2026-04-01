@@ -14,30 +14,33 @@ import anthropic
 try:
     from google import genai
     from google.genai import types as genai_types
-
-    _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-    _gemini_client = genai.Client(api_key=_GEMINI_API_KEY)
-
-    _GEMINI_MODEL = "gemini-3-flash-preview"
-
-    _GEMINI_ANALYSIS_SYSTEM = (
-        "You are a financial analyst producing a weekly equity review for a private "
-        "investor based in Ireland with a 6-12 month horizon. Ground every claim in "
-        "recent news. Be concise — 4-5 sentences per stock maximum. No fluff."
-    )
-
-    _GEMINI_SELL_SYSTEM = (
-        "You are a financial advisor for an Irish investor. Apply Irish CGT rules strictly: "
-        "33% on gains at disposal, €1,270 annual exemption, losses carry forward "
-        "indefinitely. Never recommend selling solely to rebalance — tax cost must be "
-        "justified by the trade. All values in USD unless stated."
-    )
-
     _GEMINI_AVAILABLE = True
-
 except Exception as _gemini_init_err:
-    print(f"  ⚠️  Gemini init failed: {_gemini_init_err}")
+    print(f"  ⚠️  Gemini import failed: {_gemini_init_err}")
     _GEMINI_AVAILABLE = False
+
+_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+_GEMINI_MODEL   = "gemini-3-flash-preview"
+
+_GEMINI_ANALYSIS_SYSTEM = (
+    "You are a financial analyst producing a weekly equity review for a private "
+    "investor based in Ireland with a 6-12 month horizon. Ground every claim in "
+    "recent news. Be concise — 4-5 sentences per stock maximum. No fluff."
+)
+
+_GEMINI_SELL_SYSTEM = (
+    "You are a financial advisor for an Irish investor. Apply Irish CGT rules strictly: "
+    "33% on gains at disposal, €1,270 annual exemption, losses carry forward "
+    "indefinitely. Never recommend selling solely to rebalance — tax cost must be "
+    "justified by the trade. All values in USD unless stated."
+)
+
+
+def _get_gemini_client():
+    """Return a Gemini client, created lazily on first call to avoid network calls at import."""
+    if not _GEMINI_AVAILABLE or not _GEMINI_API_KEY:
+        return None
+    return genai.Client(api_key=_GEMINI_API_KEY)
 
 _SYSTEM_PROMPT_NORMAL = """\
 You are a personal investment advisor monitoring a moderate-risk $8,000 \
@@ -392,7 +395,10 @@ def get_weekly_analysis(
     prompt = "\n".join(lines)
 
     try:
-        response = _gemini_client.models.generate_content(
+        client = _get_gemini_client()
+        if client is None:
+            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set or google-genai not installed."
+        response = client.models.generate_content(
             model=_GEMINI_MODEL,
             contents=prompt,
             config=genai_types.GenerateContentConfig(
@@ -496,7 +502,10 @@ def get_weekly_sell_recommendations(
     prompt = "\n".join(lines)
 
     try:
-        response = _gemini_client.models.generate_content(
+        client = _get_gemini_client()
+        if client is None:
+            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set or google-genai not installed."
+        response = client.models.generate_content(
             model=_GEMINI_MODEL,
             contents=prompt,
             config=genai_types.GenerateContentConfig(
