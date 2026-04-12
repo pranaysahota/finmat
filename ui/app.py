@@ -2,8 +2,11 @@
 
 Serves a single-page frontend and exposes endpoints that reuse
 the existing portfolio calculation logic, backed by SQLite.
+Protected by Basic Auth when DASHBOARD_PASSWORD is set.
 """
 
+import os
+import secrets
 import sys
 import uuid
 from datetime import datetime
@@ -13,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from flask import Flask, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, load_portfolio
 from modules.database import get_all_holdings, get_holding, get_recent_trades, insert_trade, upsert_holding
@@ -25,6 +28,33 @@ VALID_BUCKETS = {"Diversified", "Growth", "Crypto"}
 VALID_TYPES = {"stock", "crypto"}
 
 app = Flask(__name__, static_folder="static")
+
+
+# ── Basic Auth ───────────────────────────────────────────────────
+
+DASHBOARD_USER = os.getenv("DASHBOARD_USER", "finmat")
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+
+
+def _check_auth(username: str, password: str) -> bool:
+    """Verify credentials using constant-time comparison."""
+    return (
+        secrets.compare_digest(username, DASHBOARD_USER)
+        and secrets.compare_digest(password, DASHBOARD_PASSWORD)
+    )
+
+
+@app.before_request
+def _enforce_auth():
+    """Apply Basic Auth to all routes when DASHBOARD_PASSWORD is set."""
+    if not DASHBOARD_PASSWORD:
+        return
+    auth = request.authorization
+    if not auth or not _check_auth(auth.username, auth.password):
+        return Response(
+            "Unauthorized", 401,
+            {"WWW-Authenticate": 'Basic realm="finmat"'},
+        )
 
 
 # ── Frontend ─────────────────────────────────────────────────────
