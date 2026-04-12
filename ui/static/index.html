@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>finmat — Portfolio</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    :root {
+      --pico-font-size: 15px;
+    }
+    body { max-width: 960px; margin: 0 auto; padding: 1rem 1.5rem; }
+    header { display: flex; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; }
+    header h1 { margin: 0; font-size: 1.6rem; }
+    header small { color: var(--pico-muted-color); }
+    .refresh-btn { background: none; border: none; cursor: pointer; padding: 0.15rem 0.3rem; font-size: 1.1rem; color: var(--pico-muted-color); border-radius: 4px; transition: color 0.2s, transform 0.4s; line-height: 1; }
+    .refresh-btn:hover { color: var(--pico-primary); }
+    .refresh-btn.spinning { animation: spin 0.6s linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Summary cards */
+    .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+    .card { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: 0.75rem 1rem; }
+    .card .label { font-size: 0.75rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
+    .card .value { font-size: 1.3rem; font-weight: 600; }
+
+    /* Table */
+    table { font-size: 0.88rem; margin-bottom: 1.25rem; }
+    table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    table td { white-space: nowrap; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pos { color: #16a34a; }
+    .neg { color: #dc2626; }
+    .bucket-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+    .bucket-tag.Diversified { background: #fef3c7; color: #92400e; }
+    .bucket-tag.Growth { background: #ffedd5; color: #9a3412; }
+    .bucket-tag.Crypto { background: #e0e7ff; color: #3730a3; }
+    tr.total-row { font-weight: 700; border-top: 2px solid var(--pico-primary); }
+    tr.total-row td { padding-top: 0.6rem; }
+
+    /* Recent transactions */
+    .txn-section { margin-bottom: 1.25rem; }
+    .txn-section h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+    .txn-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--pico-muted-border-color); border-radius: 8px; }
+    .txn-scroll table { margin: 0; font-size: 0.84rem; }
+    .txn-scroll thead th { position: sticky; top: 0; background: var(--pico-card-background-color); z-index: 1; }
+    .side-buy { color: #16a34a; font-weight: 600; }
+    .side-sell { color: #dc2626; font-weight: 600; }
+
+    /* Charts */
+    .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+    .chart-card { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: 0.75rem 1rem; text-align: center; }
+    .chart-card h4 { margin: 0 0 0.5rem; font-size: 0.85rem; color: var(--pico-muted-color); text-transform: uppercase; letter-spacing: 0.04em; }
+    .chart-card canvas { margin: 0 auto; display: block; }
+    .chart-card:first-child canvas { max-width: 260px; max-height: 260px; }
+    .chart-wrap { position: relative; height: 260px; }
+
+    /* Trade form */
+    .trade-section { background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: 1rem 1.25rem; }
+    .trade-section h3 { margin-top: 0; font-size: 1rem; }
+    .trade-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr auto; gap: 0.5rem; align-items: end; }
+    .trade-grid label { font-size: 0.78rem; margin-bottom: 0; }
+    .trade-grid input, .trade-grid select { margin-bottom: 0; font-size: 0.88rem; height: 2.4rem; padding: 0 0.6rem; box-sizing: border-box; }
+    .trade-grid button { margin-bottom: 0; height: 2.4rem; padding: 0 1rem; white-space: nowrap; box-sizing: border-box; }
+
+    /* Side toggle */
+    .side-toggle { display: flex; gap: 0; margin-bottom: 0.75rem; }
+    .side-toggle button { flex: 1; margin: 0; border-radius: 0; font-size: 0.85rem; padding: 0.35rem 0; }
+    .side-toggle button:first-child { border-radius: 6px 0 0 6px; }
+    .side-toggle button:last-child { border-radius: 0 6px 6px 0; }
+    .side-toggle button.active-buy { background: #16a34a; border-color: #16a34a; color: #fff; }
+    .side-toggle button.active-sell { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .side-toggle button:not(.active-buy):not(.active-sell) { background: transparent; color: var(--pico-muted-color); }
+
+    /* Toast */
+    .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.75rem 1.25rem; border-radius: 8px; color: #fff; font-size: 0.88rem; z-index: 100; opacity: 0; transition: opacity 0.3s; }
+    .toast.show { opacity: 1; }
+    .toast.success { background: #16a34a; }
+    .toast.error { background: #dc2626; }
+
+    /* Loading */
+    .loading { text-align: center; padding: 3rem; color: var(--pico-muted-color); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>finmat</h1>
+    <small>Portfolio Dashboard</small>
+    <button class="refresh-btn" onclick="refreshAll()" title="Refresh data">&#x21bb;</button>
+  </header>
+
+  <!-- Summary cards -->
+  <div class="summary" id="summary">
+    <div class="card"><div class="label">Total Value</div><div class="value" id="total-value">—</div></div>
+    <div class="card"><div class="label">Total Cost</div><div class="value" id="total-cost">—</div></div>
+    <div class="card"><div class="label">Net P&L</div><div class="value" id="total-pnl">—</div></div>
+    <div class="card"><div class="label">Return</div><div class="value" id="total-return">—</div></div>
+  </div>
+
+  <!-- Portfolio table -->
+  <div id="table-container">
+    <div class="loading" id="loading">Loading portfolio…</div>
+    <table id="portfolio-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Stock</th>
+          <th>Category</th>
+          <th class="num">Avg Buy</th>
+          <th class="num">Price</th>
+          <th class="num">Value</th>
+          <th class="num">P&L ($)</th>
+          <th class="num">P&L (%)</th>
+        </tr>
+      </thead>
+      <tbody id="portfolio-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Recent transactions -->
+  <div class="txn-section">
+    <h3>Recent Transactions</h3>
+    <div class="txn-scroll">
+      <table id="txn-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Side</th>
+            <th>Ticker</th>
+            <th class="num">Qty</th>
+            <th class="num">Price</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody id="txn-body">
+          <tr><td colspan="6" style="text-align:center;color:var(--pico-muted-color)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h4>Bucket Allocation</h4>
+      <canvas id="chart-buckets"></canvas>
+    </div>
+    <div class="chart-card">
+      <h4>Holdings Breakdown</h4>
+      <div class="chart-wrap"><canvas id="chart-holdings" height="260"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Trade form -->
+  <div class="trade-section">
+    <h3>Log a Trade</h3>
+    <div class="side-toggle">
+      <button id="btn-buy" class="active-buy" onclick="setSide('buy')">Buy</button>
+      <button id="btn-sell" onclick="setSide('sell')">Sell</button>
+    </div>
+    <form id="trade-form" onsubmit="submitTrade(event)">
+      <div class="trade-grid">
+        <label>
+          Ticker
+          <input type="text" id="t-ticker" placeholder="NVDA" required>
+        </label>
+        <label id="category-label">
+          Category
+          <select id="t-category">
+            <option value="Diversified">Diversified</option>
+            <option value="Growth">Growth</option>
+            <option value="Crypto">Crypto</option>
+          </select>
+        </label>
+        <label>
+          Quantity
+          <input type="number" id="t-qty" step="any" min="0.00000001" placeholder="0" required>
+        </label>
+        <label>
+          Price (USD)
+          <input type="number" id="t-price" step="any" min="0.01" placeholder="0.00" required>
+        </label>
+        <label>
+          Total
+          <input type="text" id="t-total" readonly tabindex="-1" style="background:var(--pico-form-element-disabled-background-color)">
+        </label>
+        <button type="submit" id="submit-btn">Buy</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+  let tradeSide = 'buy';
+  let bucketChart = null;
+  let holdingsChart = null;
+
+  // ── Chart colors ───────────────────────────────────────────
+  const BUCKET_COLORS = { Diversified: '#fbbf24', Growth: '#fb923c', Crypto: '#818cf8' };
+  const HOLDING_COLORS = [
+    '#3b82f6', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6',
+    '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16',
+    '#06b6d4', '#e11d48',
+  ];
+
+  // ── Formatting helpers ──────────────────────────────────────
+  const fmt = (n) => '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const fmtPct = (n) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
+  const pnlClass = (n) => n >= 0 ? 'pos' : 'neg';
+
+  // ── Refresh button ─────────────────────────────────────────
+  async function refreshAll() {
+    const btn = document.querySelector('.refresh-btn');
+    btn.classList.add('spinning');
+    await Promise.all([loadPortfolio(), loadTransactions()]);
+    btn.classList.remove('spinning');
+    showToast('Data refreshed', 'success');
+  }
+
+  // ── Load portfolio ──────────────────────────────────────────
+  async function loadPortfolio() {
+    try {
+      const res = await fetch('/api/portfolio');
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      renderSummary(data);
+      renderTable(data);
+      renderCharts(data);
+    } catch (err) {
+      document.getElementById('loading').textContent = 'Failed to load portfolio: ' + err.message;
+    }
+  }
+
+  function renderSummary(data) {
+    document.getElementById('total-value').textContent = fmt(data.total_value);
+    document.getElementById('total-cost').textContent = fmt(data.total_cost);
+
+    const pnlEl = document.getElementById('total-pnl');
+    pnlEl.textContent = (data.total_pnl_usd >= 0 ? '+' : '') + fmt(data.total_pnl_usd);
+    pnlEl.className = 'value ' + pnlClass(data.total_pnl_usd);
+
+    const retEl = document.getElementById('total-return');
+    retEl.textContent = fmtPct(data.total_pnl_pct);
+    retEl.className = 'value ' + pnlClass(data.total_pnl_pct);
+  }
+
+  function renderTable(data) {
+    const tbody = document.getElementById('portfolio-body');
+    tbody.innerHTML = '';
+
+    for (const h of data.holdings) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${h.ticker}</strong></td>
+        <td><span class="bucket-tag ${h.bucket}">${h.bucket}</span></td>
+        <td class="num">${fmt(h.avg_buy)}</td>
+        <td class="num">${fmt(h.current_price)}</td>
+        <td class="num">${fmt(h.current_value)}</td>
+        <td class="num ${pnlClass(h.pnl_usd)}">${(h.pnl_usd >= 0 ? '+' : '') + fmt(h.pnl_usd)}</td>
+        <td class="num ${pnlClass(h.pnl_pct)}">${fmtPct(h.pnl_pct)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Total row
+    const totalTr = document.createElement('tr');
+    totalTr.className = 'total-row';
+    totalTr.innerHTML = `
+      <td>Total</td>
+      <td></td>
+      <td class="num">${fmt(data.total_cost)}</td>
+      <td></td>
+      <td class="num">${fmt(data.total_value)}</td>
+      <td class="num ${pnlClass(data.total_pnl_usd)}">${(data.total_pnl_usd >= 0 ? '+' : '') + fmt(data.total_pnl_usd)}</td>
+      <td class="num ${pnlClass(data.total_pnl_pct)}">${fmtPct(data.total_pnl_pct)}</td>
+    `;
+    tbody.appendChild(totalTr);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('portfolio-table').style.display = '';
+  }
+
+  // ── Charts ─────────────────────────────────────────────────
+  function renderCharts(data) {
+    // Bucket allocation pie
+    const bucketLabels = Object.keys(data.bucket_weights);
+    const bucketValues = Object.values(data.bucket_weights);
+    const bucketColors = bucketLabels.map(b => BUCKET_COLORS[b] || '#94a3b8');
+
+    if (bucketChart) bucketChart.destroy();
+    bucketChart = new Chart(document.getElementById('chart-buckets'), {
+      type: 'doughnut',
+      data: {
+        labels: bucketLabels,
+        datasets: [{ data: bucketValues, backgroundColor: bucketColors, borderWidth: 1, borderColor: '#fff' }],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 12 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed.toFixed(1)}%` } },
+        },
+      },
+    });
+
+    // Holdings breakdown bar — sorted by portfolio weight descending
+    const sorted = [...data.holdings].sort((a, b) => b.current_value - a.current_value);
+    const holdingLabels = sorted.map(h => h.ticker);
+    const holdingValues = sorted.map(h => h.current_value);
+    const holdingColors = sorted.map((_, i) => HOLDING_COLORS[i % HOLDING_COLORS.length]);
+
+    if (holdingsChart) holdingsChart.destroy();
+    holdingsChart = new Chart(document.getElementById('chart-holdings'), {
+      type: 'bar',
+      data: {
+        labels: holdingLabels,
+        datasets: [{ data: holdingValues, backgroundColor: holdingColors, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (ctx) => `${fmt(ctx.parsed.y)} (${(ctx.parsed.y / data.total_value * 100).toFixed(1)}%)` } },
+        },
+        scales: {
+          y: { ticks: { callback: (v) => '$' + v.toLocaleString() }, grid: { color: '#e5e7eb' } },
+          x: { grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // ── Recent transactions ─────────────────────────────────────
+  async function loadTransactions() {
+    try {
+      const res = await fetch('/api/trades/recent');
+      const trades = await res.json();
+      const tbody = document.getElementById('txn-body');
+      if (!trades.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--pico-muted-color)">No transactions yet</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      for (const t of trades) {
+        const side = t.side || 'buy';
+        const qty = t.qty || 0;
+        const price = t.price || 0;
+        const total = t.trade_value || (qty * price);
+        const date = t.timestamp ? t.timestamp.slice(0, 10) : '—';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${date}</td>
+          <td><span class="side-${side}">${side.toUpperCase()}</span></td>
+          <td><strong>${t.ticker}</strong></td>
+          <td class="num">${qty}</td>
+          <td class="num">${fmt(price)}</td>
+          <td class="num">${fmt(total)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    } catch (err) {
+      document.getElementById('txn-body').innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--pico-muted-color)">Failed to load</td></tr>';
+    }
+  }
+
+  // ── Trade form ──────────────────────────────────────────────
+  function setSide(side) {
+    tradeSide = side;
+    const buyBtn = document.getElementById('btn-buy');
+    const sellBtn = document.getElementById('btn-sell');
+    const submitBtn = document.getElementById('submit-btn');
+    buyBtn.className = side === 'buy' ? 'active-buy' : '';
+    sellBtn.className = side === 'sell' ? 'active-sell' : '';
+    submitBtn.textContent = side === 'buy' ? 'Buy' : 'Sell';
+    submitBtn.style.background = side === 'buy' ? '#16a34a' : '#dc2626';
+    submitBtn.style.borderColor = side === 'buy' ? '#16a34a' : '#dc2626';
+    // Show category only for buy
+    document.getElementById('category-label').style.display = side === 'buy' ? '' : 'none';
+  }
+
+  // Live total calculation
+  const qtyInput = document.getElementById('t-qty');
+  const priceInput = document.getElementById('t-price');
+  const totalInput = document.getElementById('t-total');
+  function updateTotal() {
+    const q = parseFloat(qtyInput.value) || 0;
+    const p = parseFloat(priceInput.value) || 0;
+    totalInput.value = q && p ? fmt(q * p) : '';
+  }
+  qtyInput.addEventListener('input', updateTotal);
+  priceInput.addEventListener('input', updateTotal);
+
+  async function submitTrade(e) {
+    e.preventDefault();
+    const ticker = document.getElementById('t-ticker').value.trim();
+    const qty = parseFloat(qtyInput.value);
+    const price = parseFloat(priceInput.value);
+
+    if (!ticker || !qty || !price) return;
+
+    const body = { side: tradeSide, ticker, qty, price };
+    if (tradeSide === 'buy') {
+      const category = document.getElementById('t-category').value;
+      body.bucket = category;
+      body.asset_type = category === 'Crypto' ? 'crypto' : 'stock';
+    }
+
+    try {
+      const res = await fetch('/api/trade', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || 'Trade failed', 'error');
+        return;
+      }
+
+      showToast(`${tradeSide.toUpperCase()} ${qty} ${ticker} @ ${fmt(price)} logged`, 'success');
+      document.getElementById('trade-form').reset();
+      totalInput.value = '';
+      loadPortfolio();
+      loadTransactions();
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    }
+  }
+
+  // ── Toast ───────────────────────────────────────────────────
+  function showToast(msg, type) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast show ' + type;
+    setTimeout(() => toast.className = 'toast', 3000);
+  }
+
+  // ── Init ────────────────────────────────────────────────────
+  loadPortfolio();
+  loadTransactions();
+</script>
+
+</body>
+</html>
