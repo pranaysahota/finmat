@@ -79,7 +79,7 @@ def api_portfolio():
     try:
         portfolio = load_portfolio()
         prices = get_all_prices(portfolio)
-        state = calculate_portfolio(prices)
+        state = calculate_portfolio(prices, portfolio)
 
         # Flatten holdings into a sorted list, skip zero-qty positions
         holdings_list = []
