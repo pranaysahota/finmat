@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Ensure /data directory exists (Fly.io volume mount point)
+RUN mkdir -p /data
+
+# Install sqlite3 CLI for debugging
+RUN apt-get update && apt-get install -y --no-install-recommends sqlite3 && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -18,5 +24,7 @@ RUN python -m pytest tests/ -v
 # Entrypoint reconstructs portfolio/local.py from secret then starts the agent
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
+
+EXPOSE 5001
 
 CMD ["./entrypoint.sh"]
