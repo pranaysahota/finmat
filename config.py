@@ -16,7 +16,6 @@ Portfolio holdings live in portfolio/local.py (gitignored).
 #                  All positions subject to Irish CGT at 33% on actual disposal only.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-import importlib.util
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -82,39 +81,34 @@ NEWS_SOURCES = {
 }
 
 # ── File Paths (pathlib — not raw strings) ───────────────────
+# On Fly.io the persistent volume is mounted at /data; locally use data/
+DATA_DIR = Path("/data") if os.path.exists("/data") else Path("data/")
+DB_PATH  = DATA_DIR / "finmat.db"
+
 PATHS = {
-    "DATA_DIR":     Path("data/"),                         # directory for all runtime data files
-    "HISTORY_FILE": Path("data/portfolio_history.json"),   # daily portfolio snapshot history
-    "TRADES_FILE":  Path("data/trades.json"),              # permanent trade log (appended by trade.py)
+    "DATA_DIR":     DATA_DIR,
+    "HISTORY_FILE": DATA_DIR / "portfolio_history.json",   # legacy — snapshots still use JSON
 }
 
 # ── Load Private Portfolio ───────────────────────────────────
-# portfolio/local.py is gitignored and holds your real holdings.
-# It is never committed. See portfolio/local.example.py for the structure.
+# Holdings are stored in SQLite (data/finmat.db).
+# portfolio/local.py is kept as a legacy fallback for initial migration.
 
-_PORTFOLIO_FILE = Path(__file__).parent / "portfolio" / "local.py"
+from modules.database import get_all_holdings, init_db
+
+init_db()  # ensure tables exist on import
 
 
 def load_portfolio() -> dict:
-    """Load PORTFOLIO fresh from portfolio/local.py on every call.
+    """Load PORTFOLIO fresh from SQLite on every call.
 
     Use this at the start of each pipeline run to pick up trades logged
-    via trade.py without requiring a process restart.
+    via trade.py or the UI without requiring a process restart.
     """
-    spec = importlib.util.spec_from_file_location("portfolio_local_fresh", _PORTFOLIO_FILE)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.PORTFOLIO
+    return get_all_holdings()
 
 
-try:
-    PORTFOLIO = load_portfolio()
-except FileNotFoundError:
-    raise SystemExit(
-        "\n❌ portfolio/local.py not found.\n"
-        "Copy portfolio/local.example.py → portfolio/local.py "
-        "and fill in your real holdings.\n"
-    )
+PORTFOLIO = load_portfolio()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # USAGE — what each module imports from this file

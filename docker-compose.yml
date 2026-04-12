@@ -2,4 +2,11 @@ services:
   finmat:
     build: .
     env_file: .env
+    ports:
+      - "5001:5001"
+    volumes:
+      - finmat-data:/app/data
     restart: unless-stopped
+
+volumes:
+  finmat-data:

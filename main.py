@@ -144,7 +144,7 @@ def run_weekly_digest() -> None:
             ticker
             for bucket, holdings in portfolio.items()
             for ticker, asset in holdings.items()
-            if asset.get("type") == "stock"
+            if asset.get("type") == "stock" and asset.get("qty", 0) > 0
         ]
         sentiment = get_all_sentiment(stock_tickers)
     except Exception as exc:
