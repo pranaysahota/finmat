@@ -5,6 +5,10 @@ design-prompts.md
 
 # Runtime data
 data/*.json
+data/*.db
+data/*.db-wal
+data/*.db-shm
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

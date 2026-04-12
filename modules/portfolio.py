@@ -8,12 +8,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, PORTFOLIO, RULES
 
-def calculate_portfolio(prices: dict) -> dict:
+def calculate_portfolio(prices: dict, portfolio: dict | None = None) -> dict:
     """Calculate the full portfolio state from holdings and live prices.
 
-    Reads qty and avg_buy for every ticker from PORTFOLIO (imported from
-    portfolio/local.py via config.py), pairs them with the prices dict,
-    and produces the complete portfolio state dict.
+    Reads qty and avg_buy for every ticker from the portfolio dict,
+    pairs them with the prices dict, and produces the complete portfolio
+    state dict.
 
     Pure calculation — no I/O, no API calls, no side effects.
     Any ticker whose price is None is skipped with a printed warning so
@@ -22,18 +22,22 @@ def calculate_portfolio(prices: dict) -> dict:
     Args:
         prices: Flat {ticker: price} dict as returned by
                 modules.price_fetcher.get_all_prices().
+        portfolio: Optional portfolio dict. Defaults to the module-level
+                   PORTFOLIO for backward compatibility with main.py.
 
     Returns:
         portfolio_state dict — see CLAUDE.md for the full shape.
     """
+    if portfolio is None:
+        portfolio = PORTFOLIO
 
     holdings:      dict = {}
     bucket_values: dict = {
-        bucket: 0.0 for bucket in PORTFOLIO
+        bucket: 0.0 for bucket in portfolio
         if bucket != "Crypto" or CRYPTO_ACTIVE
     }
 
-    for bucket, assets in PORTFOLIO.items():
+    for bucket, assets in portfolio.items():
         if bucket == "Crypto" and not CRYPTO_ACTIVE:
             continue
         for ticker, asset in assets.items():
