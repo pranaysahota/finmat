@@ -27,6 +27,11 @@
     /* Table */
     table { font-size: 0.88rem; margin-bottom: 1.25rem; }
     table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--pico-primary); }
+    th.sortable::after { content: ' \2195'; font-size: 0.7rem; opacity: 0.4; }
+    th.sortable.asc::after { content: ' \2191'; opacity: 1; }
+    th.sortable.desc::after { content: ' \2193'; opacity: 1; }
     table td { white-space: nowrap; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .pos { color: #16a34a; }
@@ -104,12 +109,12 @@
     <table id="portfolio-table" style="display:none">
       <thead>
         <tr>
-          <th>Stock</th>
+          <th class="sortable" data-sort="ticker" onclick="sortTable('ticker')">Stock</th>
           <th>Category</th>
           <th class="num">Avg Buy</th>
           <th class="num">Price</th>
-          <th class="num">Value</th>
-          <th class="num">P&L ($)</th>
+          <th class="num sortable" data-sort="current_value" onclick="sortTable('current_value')">Value</th>
+          <th class="num sortable" data-sort="pnl_usd" onclick="sortTable('pnl_usd')">P&L ($)</th>
           <th class="num">P&L (%)</th>
         </tr>
       </thead>
@@ -197,6 +202,9 @@
   let tradeSide = 'buy';
   let bucketChart = null;
   let holdingsChart = null;
+  let lastPortfolioData = null;
+  let sortKey = null;
+  let sortDir = 'asc';
 
   // ── Chart colors ───────────────────────────────────────────
   const BUCKET_COLORS = { Diversified: '#fbbf24', Growth: '#fb923c', Crypto: '#818cf8' };
@@ -247,11 +255,36 @@
     retEl.className = 'value ' + pnlClass(data.total_pnl_pct);
   }
 
+  function sortTable(key) {
+    if (sortKey === key) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortDir = key === 'ticker' ? 'asc' : 'desc';
+    }
+    // Update header classes
+    document.querySelectorAll('#portfolio-table th.sortable').forEach(th => {
+      th.classList.remove('asc', 'desc');
+      if (th.dataset.sort === sortKey) th.classList.add(sortDir);
+    });
+    if (lastPortfolioData) renderTable(lastPortfolioData);
+  }
+
   function renderTable(data) {
+    lastPortfolioData = data;
     const tbody = document.getElementById('portfolio-body');
     tbody.innerHTML = '';
 
-    for (const h of data.holdings) {
+    let holdings = [...data.holdings];
+    if (sortKey) {
+      holdings.sort((a, b) => {
+        const av = a[sortKey], bv = b[sortKey];
+        const cmp = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+        return sortDir === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    for (const h of holdings) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>${h.ticker}</strong></td>
