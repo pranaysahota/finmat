@@ -8,6 +8,7 @@ Protected by Basic Auth when DASHBOARD_PASSWORD is set.
 import os
 import secrets
 import sys
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -289,6 +290,33 @@ def _handle_sell(ticker_raw: str, qty: float, price: float):
     insert_trade(trade_record)
 
     return jsonify({"success": True, "trade": trade_record})
+
+
+# ── Digest trigger ──────────────────────────────────────────────
+
+# Guard against concurrent digest runs
+_digest_lock = threading.Lock()
+
+
+@app.route("/api/digest", methods=["POST"])
+def api_digest():
+    """Trigger the daily digest pipeline in a background thread.
+
+    Returns immediately with 202 Accepted. The digest runs asynchronously
+    and sends results to Telegram/email as usual.
+    """
+    if not _digest_lock.acquire(blocking=False):
+        return jsonify({"error": "Digest is already running"}), 409
+
+    def _run():
+        try:
+            from main import run_weekly_digest
+            run_weekly_digest()
+        finally:
+            _digest_lock.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify({"status": "Digest started"}), 202
 
 
 # ── Helpers ──────────────────────────────────────────────────────

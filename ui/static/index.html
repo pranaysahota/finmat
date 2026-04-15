@@ -122,6 +122,11 @@
     </table>
   </div>
 
+  <!-- Digest trigger -->
+  <div style="margin-bottom: 1.25rem;">
+    <button id="digest-btn" onclick="triggerDigest()" style="font-size: 0.88rem; padding: 0.5rem 1.25rem;">Generate Daily Digest</button>
+  </div>
+
   <!-- Recent transactions -->
   <div class="txn-section">
     <h3>Recent Transactions</h3>
@@ -471,6 +476,27 @@
     toast.textContent = msg;
     toast.className = 'toast show ' + type;
     setTimeout(() => toast.className = 'toast', 3000);
+  }
+
+  // ── Digest trigger ─────────────────────────────────────────
+  async function triggerDigest() {
+    const btn = document.getElementById('digest-btn');
+    btn.disabled = true;
+    btn.textContent = 'Running…';
+    try {
+      const res = await fetch('/api/digest', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Digest failed', 'error');
+      } else {
+        showToast('Digest started — check Telegram/email', 'success');
+      }
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Generate Daily Digest';
+    }
   }
 
   // ── Init ────────────────────────────────────────────────────

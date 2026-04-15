@@ -96,7 +96,7 @@ def get_all_holdings() -> dict:
         {bucket: {ticker: {type, qty, avg_buy, allocation_usd, bucket_pct}}}
     """
     conn = get_connection()
-    rows = conn.execute("SELECT * FROM holdings ORDER BY bucket, ticker").fetchall()
+    rows = conn.execute("SELECT * FROM holdings WHERE qty > 0 ORDER BY bucket, ticker").fetchall()
     conn.close()
 
     portfolio: dict = {}
