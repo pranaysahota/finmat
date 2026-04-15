@@ -47,6 +47,8 @@ def calculate_portfolio(prices: dict, portfolio: dict | None = None) -> dict:
                 continue
 
             qty       = asset["qty"]
+            if qty <= 0:
+                continue
             avg_buy   = asset["avg_buy"]
 
             current_value = round(qty * price,   2)

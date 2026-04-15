@@ -112,8 +112,8 @@ class TestCalculatePortfolio:
         # bitcoin: (1000-800)/800*100 = 25%
         assert state["holdings"]["bitcoin"]["pnl_pct"] == 25.0
 
-    def test_zero_cost_basis_gives_zero_pnl_pct(self):
-        """qty=0 → cost_basis=0 → no division by zero, pnl_pct=0."""
+    def test_zero_qty_excluded_from_holdings(self):
+        """qty=0 positions (sold) are excluded from portfolio state entirely."""
         portfolio_with_zero = {
             "Diversified": {
                 "MSFT": {"type": "stock", "qty": 0, "avg_buy": 0.0,
@@ -125,7 +125,7 @@ class TestCalculatePortfolio:
         import modules.portfolio as pm
         pm.PORTFOLIO = portfolio_with_zero
         state = calculate_portfolio({"MSFT": 120.00})
-        assert state["holdings"]["MSFT"]["pnl_pct"] == 0.0
+        assert "MSFT" not in state["holdings"]
 
     def test_ticker_with_none_price_excluded_from_holdings(self):
         prices_with_missing = {**MOCK_PRICES, "JNJ": None}
