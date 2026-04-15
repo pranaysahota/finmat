@@ -1,4 +1,4 @@
-"""Entry point — wires all modules together, runs daily CRITICAL price checks and weekly digest on a schedule."""
+"""Entry point — wires all modules together, runs daily CRITICAL price checks and daily digest on a schedule."""
 
 import html
 from datetime import datetime, timedelta
@@ -94,7 +94,7 @@ def run_price_check() -> None:
 
 
 def run_weekly_digest() -> None:
-    """Weekly Sunday 14:30 digest: prices → sentiment → Gemini analysis → sell recs → send.
+    """Daily 14:30 digest: prices → sentiment → Gemini analysis → sell recs → send.
 
     Pipeline:
         get_performance_summary  (skips if insufficient history)
@@ -110,13 +110,13 @@ def run_weekly_digest() -> None:
     """
     ts  = datetime.now().strftime("%Y-%m-%d %H:%M")
     now = datetime.now()
-    print(f"[{ts}] ── Weekly Digest started ──")
+    print(f"[{ts}] ── Daily Digest started ──")
 
     # ── 1. Performance summary ──
     try:
         performance = get_performance_summary()
         if not performance:
-            print(f"[{ts}] Weekly Digest skipped — insufficient history")
+            print(f"[{ts}] Daily Digest skipped — insufficient history")
             return
     except Exception as exc:
         print(f"[{ts}] Performance summary FAILED: {exc}")
@@ -138,7 +138,7 @@ def run_weekly_digest() -> None:
     # ── 3. Sentiment (stocks only) + macro sentiment ──
     sentiment      = {}
     macro_sentiment = {}
-    print(f"[{ts}] 📊 Fetching sentiment for weekly digest...")
+    print(f"[{ts}] 📊 Fetching sentiment for daily digest...")
     try:
         stock_tickers = [
             ticker
@@ -225,7 +225,7 @@ def run_weekly_digest() -> None:
 </html>"""
 
     # ── 7. Send email ──
-    print(f"[{ts}] 📧 Sending weekly email...")
+    print(f"[{ts}] 📧 Sending daily digest email...")
     try:
         send_weekly_email(f"📊 Finmat Weekly — {date_range}", email_body)
     except Exception as exc:
@@ -254,7 +254,7 @@ if __name__ == "__main__":
 
     # Schedule recurring jobs
     schedule.every().day.at("13:00").do(run_price_check)   # CRITICAL-only daily check
-    schedule.every().sunday.at("14:30").do(run_weekly_digest)
+    schedule.every().day.at("14:30").do(run_weekly_digest)
 
     try:
         while True:
