@@ -1,6 +1,6 @@
 # finmat
 
-A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets, runs automated daily briefings via Telegram and weekly HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules.
+A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets, runs automated daily briefings via Telegram and weekly HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules. Includes a web dashboard for live portfolio monitoring and trade logging, backed by SQLite.
 
 ---
 
@@ -10,7 +10,10 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   [Manual: Revolut purchase]
            │
            ▼
-       trade.py          ← CLI: logs qty + avg_buy into portfolio/local.py
+   Web Dashboard (UI)     ← log buy/sell trades via browser
+           │
+           ▼
+       SQLite DB           ← holdings (qty, avg_buy) + trade history
            │
            └─────────────────────────────────────────────┐
                                                          │
@@ -30,7 +33,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   │  │   price_fetcher                             │  │  │
   │  │       │                                     │  │  │
   │  │       ▼                                     │  │  │
-  │  │   portfolio.py  ← portfolio/local.py ◄──────┼──┘  │
+  │  │   portfolio.py  ← SQLite DB ◄───────────────┼──┘  │
   │  │   (calc P&L, weights, bucket drift)         │     │
   │  │       │                                     │     │
   │  │       ├──► history.py  → data/portfolio_    │     │
@@ -115,17 +118,23 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 
 ### Performance History
 - **Append-only** daily snapshots in `data/portfolio_history.json` — never overwritten
+- Holdings and trade history persisted in **SQLite** (`data/finmat.db`)
 - Tracks since-inception return, 7-day change, best/worst performers across all snapshots
 - Prevents duplicate snapshots if the agent restarts mid-day
 - Performance summary is included in both the daily briefing and weekly digest
 
-### Trade Logging (Revolut Integration)
-- `trade.py` is the only entry point for updating holdings — never hand-edit `portfolio/local.py`
-- Interactive CLI: prompts for ticker, quantity, price paid
+### Web Dashboard
+- **Live portfolio view** — summary cards, per-holding table with sortable columns (Stock, Value, P&L), bucket allocation and holdings breakdown charts
+- **Trade logging** — buy and sell trades submitted via the browser, with live total calculation and validation
+- **Recent transactions** — last 5 trades displayed in a scrollable table
+- **Basic Auth** — protected by `DASHBOARD_USER` / `DASHBOARD_PASSWORD` environment variables
+- Served by Flask (`ui/app.py`) and exposed via Fly.io HTTP service
+
+### Trade Logging
+- Trades are logged via the **web dashboard** — buy or sell, with ticker, quantity, and price
 - Calculates new **weighted average buy price**: `(old_qty × old_avg + new_qty × price) / (old_qty + new_qty)`
-- Rewrites `portfolio/local.py` using Python's `ast` module — not string replacement — to avoid corrupting comments
-- Appends a permanent record to `data/trades.json`
-- Shows a confirmation summary and asks for confirmation before writing anything
+- All holdings and trades are persisted in **SQLite** (`data/finmat.db`) via `modules/database.py`
+- `trade.py` CLI is still available as a fallback entry point
 
 ### Irish Tax Optimisation
 - **No ETFs** — Irish exit tax (38%) + 8-year deemed disposal makes them unfavourable vs individual stocks at CGT 33%
@@ -162,7 +171,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 ```
 finmat/
 ├── main.py                      # Scheduler — orchestrates all pipelines
-├── trade.py                     # CLI — log Revolut purchases
+├── trade.py                     # CLI fallback — log Revolut purchases
 ├── config.py                    # Settings, alert rules, bucket targets
 ├── modules/
 │   ├── price_fetcher.py         # Yahoo Finance (+ CoinGecko when CRYPTO_ACTIVE)
@@ -171,20 +180,21 @@ finmat/
 │   ├── news_sentiment.py        # Headlines → Claude Haiku (per-ticker + macro themes)
 │   ├── decision_engine.py       # Claude Sonnet daily briefing + Gemini weekly digest
 │   ├── alerts.py                # Telegram message formatting + sending
+│   ├── database.py              # SQLite persistence — holdings + trades
 │   └── run_logger.py            # JSONL run logger for pipeline observability
+├── ui/
+│   ├── app.py                   # Flask REST API + Basic Auth
+│   └── static/index.html        # Single-page dashboard (portfolio, charts, trade form)
 ├── scripts/
 │   ├── read_logs.sh             # Shell script for tailing/filtering JSONL logs
 │   └── review_logs.py           # AI-powered log review via Claude
-├── portfolio/
-│   ├── local.py                 # Holdings — qty, avg_buy (gitignored)
-│   └── local.example.py        # Placeholder structure (committed)
-├── tests/                       # 395 unit tests — all mocked
+├── tests/                       # Unit tests — all mocked
 ├── tasks/
 │   ├── todo.md                  # Active task plan
 │   └── lessons.md               # Accumulated project lessons
 └── data/
+    ├── finmat.db                # SQLite database — holdings + trades (gitignored)
     ├── portfolio_history.json   # Daily snapshots (gitignored)
-    ├── trades.json              # Trade log (gitignored)
     └── logs/                    # JSONL pipeline run logs (gitignored)
 ```
 
@@ -195,18 +205,20 @@ finmat/
 ```bash
 # 1. Copy and fill in API keys
 cp .env.example .env
-# Fill in: ANTHROPIC_API_KEY, GOOGLE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, EMAIL_*
+# Fill in: ANTHROPIC_API_KEY, GOOGLE_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+#          DASHBOARD_USER, DASHBOARD_PASSWORD, EMAIL_*
 
-# 2. Set up portfolio holdings
-cp portfolio/local.example.py portfolio/local.py
-# Zero out all qty values, then log your first real trade:
-python trade.py
-
-# 3a. Run directly
+# 2. Install dependencies
 pip install -r requirements.txt
+
+# 3a. Run the scheduler
 python main.py
 
-# 3b. Or run via Docker (recommended)
+# 3b. Run the web dashboard (port 5001)
+python ui/app.py
+# Then log your first trade via the dashboard at http://localhost:5001
+
+# 3c. Or run via Docker (recommended)
 docker compose up
 ```
 
@@ -220,6 +232,8 @@ docker compose up
 | `GOOGLE_API_KEY` | Google Gemini | Pay per token | Gemini for weekly digest analysis |
 | `TELEGRAM_BOT_TOKEN` | Telegram BotFather | Free | Create via @BotFather |
 | `TELEGRAM_CHAT_ID` | Telegram | Free | Your personal chat ID |
+| `DASHBOARD_USER` | Web dashboard | — | Basic Auth username (default: `finmat`) |
+| `DASHBOARD_PASSWORD` | Web dashboard | — | Basic Auth password (auth disabled if unset) |
 | `EMAIL_*` | SMTP (weekly digest) | Free | Sender/recipient config for weekly email |
 | Yahoo Finance | Stock prices | Free | No key needed |
 | CoinGecko | Crypto prices | Free | No key needed (used when `CRYPTO_ACTIVE = True`) |
@@ -229,10 +243,14 @@ docker compose up
 
 ## Logging a Trade
 
-After every Revolut purchase, run:
+After every Revolut purchase, log the trade via the **web dashboard**:
+
+1. Open the dashboard at your deployed URL (or `http://localhost:5001` locally)
+2. Use the **Log a Trade** form — select buy/sell, enter ticker, quantity, and price
+3. The trade is persisted to SQLite and the portfolio updates immediately
+
+Alternatively, `trade.py` is available as a CLI fallback:
 
 ```bash
 python trade.py
 ```
-
-The CLI will prompt for ticker, quantity, and price paid. It calculates the new weighted average buy price, shows a confirmation summary, and updates both `portfolio/local.py` and `data/trades.json` on confirmation.
