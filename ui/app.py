@@ -310,8 +310,8 @@ def api_digest():
 
     def _run():
         try:
-            from main import run_weekly_digest
-            run_weekly_digest()
+            from main import run_daily_digest
+            run_daily_digest()
         finally:
             _digest_lock.release()
 
