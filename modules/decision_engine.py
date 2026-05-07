@@ -42,20 +42,16 @@ def _get_gemini_client(timeout_ms: int = 60_000):
     )
 
 
-_GEMINI_TRANSIENT_ERRORS = ("503", "UNAVAILABLE", "504", "DEADLINE_EXCEEDED")
-
-
 def _gemini_generate(client, prompt: str, config: genai_types.GenerateContentConfig) -> str:
-    """Call Gemini with automatic fallback to gemini-2.5-flash on transient errors (503/504)."""
+    """Call Gemini with automatic fallback to gemini-2.5-flash on 503 UNAVAILABLE."""
     try:
         return client.models.generate_content(
             model=_GEMINI_MODEL, contents=prompt, config=config
         ).text.strip()
     except Exception as exc:
-        exc_str = str(exc)
-        if not any(marker in exc_str for marker in _GEMINI_TRANSIENT_ERRORS):
+        if "503" not in str(exc) and "UNAVAILABLE" not in str(exc):
             raise
-        print(f"  ⚠️  {_GEMINI_MODEL} transient error — retrying with {_GEMINI_MODEL_FALLBACK}: {exc_str[:80]}")
+        print(f"  ⚠️  {_GEMINI_MODEL} unavailable (503) — retrying with {_GEMINI_MODEL_FALLBACK}")
         return client.models.generate_content(
             model=_GEMINI_MODEL_FALLBACK, contents=prompt, config=config
         ).text.strip()
@@ -410,7 +406,7 @@ def get_weekly_analysis(
     prompt = "\n".join(lines)
 
     try:
-        client = _get_gemini_client(timeout_ms=120_000)
+        client = _get_gemini_client(timeout_ms=300_000)
         if client is None:
             return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
         return _gemini_generate(
@@ -421,7 +417,11 @@ def get_weekly_analysis(
             ),
         )
     except Exception as exc:
-        print(f"  ⚠️  Gemini weekly analysis error: {exc}")
+        exc_str = str(exc)
+        if "504" in exc_str or "DEADLINE_EXCEEDED" in exc_str:
+            print(f"  ⚠️  Gemini weekly analysis timed out after 5 minutes")
+        else:
+            print(f"  ⚠️  Gemini weekly analysis error: {exc}")
         return "⚠️ Gemini analysis unavailable this week."
 
 
@@ -512,7 +512,7 @@ def get_weekly_sell_recommendations(
     prompt = "\n".join(lines)
 
     try:
-        client = _get_gemini_client()
+        client = _get_gemini_client(timeout_ms=300_000)
         if client is None:
             return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
         return _gemini_generate(
@@ -522,7 +522,11 @@ def get_weekly_sell_recommendations(
             ),
         )
     except Exception as exc:
-        print(f"  ⚠️  Gemini sell recommendations error: {exc}")
+        exc_str = str(exc)
+        if "504" in exc_str or "DEADLINE_EXCEEDED" in exc_str:
+            print(f"  ⚠️  Gemini sell recommendations timed out after 5 minutes")
+        else:
+            print(f"  ⚠️  Gemini sell recommendations error: {exc}")
         return "⚠️ Sell recommendations unavailable this week."
 
 
