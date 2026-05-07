@@ -272,8 +272,6 @@ class TestConfigSchema:
     def test_paths_has_required_keys(self):
         from config import PATHS
         assert "DATA_DIR" in PATHS
-        assert "HISTORY_FILE" in PATHS
-        # TRADES_FILE removed — trades now stored in SQLite
 
     def test_paths_are_pathlib_paths(self):
         from config import PATHS

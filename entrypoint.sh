@@ -10,13 +10,11 @@ if [ -n "$PORTFOLIO_LOCAL_PY" ]; then
     echo "✓ portfolio/local.py reconstructed from secret"
 fi
 
-# Copy legacy data files to persistent volume if not already there
-for f in portfolio_history.json trades.json; do
-    if [ -f /app/data/$f ] && [ ! -f /data/$f ]; then
-        cp /app/data/$f /data/$f
-        echo "✓ Copied $f to /data/"
-    fi
-done
+# Copy legacy trades file to persistent volume if not already there
+if [ -f /app/data/trades.json ] && [ ! -f /data/trades.json ]; then
+    cp /app/data/trades.json /data/trades.json
+    echo "✓ Copied trades.json to /data/"
+fi
 
 # Run migrations (idempotent — skips if already applied)
 python scripts/migrate_to_sqlite.py
