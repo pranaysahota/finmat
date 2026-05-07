@@ -14,8 +14,9 @@ import anthropic
 from google import genai
 from google.genai import types as genai_types
 
-_GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-_GEMINI_MODEL   = "gemini-3-flash-preview"
+_GEMINI_API_KEY      = os.environ.get("GEMINI_API_KEY", "")
+_GEMINI_MODEL        = "gemini-3-flash-preview"
+_GEMINI_MODEL_FALLBACK = "gemini-2.5-flash"
 
 _GEMINI_ANALYSIS_SYSTEM = (
     "You are a financial analyst producing a weekly equity review for a private "
@@ -39,6 +40,21 @@ def _get_gemini_client(timeout_ms: int = 60_000):
         api_key=_GEMINI_API_KEY,
         http_options=genai_types.HttpOptions(timeout=timeout_ms),
     )
+
+
+def _gemini_generate(client, prompt: str, config: genai_types.GenerateContentConfig) -> str:
+    """Call Gemini with automatic fallback to gemini-2.5-flash on 503 UNAVAILABLE."""
+    try:
+        return client.models.generate_content(
+            model=_GEMINI_MODEL, contents=prompt, config=config
+        ).text.strip()
+    except Exception as exc:
+        if "503" not in str(exc) and "UNAVAILABLE" not in str(exc):
+            raise
+        print(f"  ⚠️  {_GEMINI_MODEL} unavailable (503) — retrying with {_GEMINI_MODEL_FALLBACK}")
+        return client.models.generate_content(
+            model=_GEMINI_MODEL_FALLBACK, contents=prompt, config=config
+        ).text.strip()
 
 _SYSTEM_PROMPT_NORMAL = """\
 You are a personal investment advisor monitoring a moderate-risk $8,000 \
@@ -393,15 +409,13 @@ def get_weekly_analysis(
         client = _get_gemini_client(timeout_ms=120_000)
         if client is None:
             return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
-        response = client.models.generate_content(
-            model=_GEMINI_MODEL,
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
+        return _gemini_generate(
+            client, prompt,
+            genai_types.GenerateContentConfig(
                 system_instruction=_GEMINI_ANALYSIS_SYSTEM,
                 tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
             ),
         )
-        return response.text.strip()
     except Exception as exc:
         print(f"  ⚠️  Gemini weekly analysis error: {exc}")
         return "⚠️ Gemini analysis unavailable this week."
@@ -496,15 +510,13 @@ def get_weekly_sell_recommendations(
     try:
         client = _get_gemini_client()
         if client is None:
-            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set or google-genai not installed."
-        response = client.models.generate_content(
-            model=_GEMINI_MODEL,
-            contents=prompt,
-            config=genai_types.GenerateContentConfig(
+            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
+        return _gemini_generate(
+            client, prompt,
+            genai_types.GenerateContentConfig(
                 system_instruction=_GEMINI_SELL_SYSTEM,
             ),
         )
-        return response.text.strip()
     except Exception as exc:
         print(f"  ⚠️  Gemini sell recommendations error: {exc}")
         return "⚠️ Sell recommendations unavailable this week."

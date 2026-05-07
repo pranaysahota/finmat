@@ -1,7 +1,7 @@
 """Entry point — wires all modules together, runs daily CRITICAL price checks and daily digest on a schedule."""
 
 import html
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import markdown as md
 from zoneinfo import ZoneInfo
@@ -94,11 +94,11 @@ def run_price_check() -> None:
         print(f"[{ts}] Price check FAILED: {exc}")
 
 
-def run_weekly_digest() -> None:
+def run_daily_digest() -> None:
     """Daily 14:30 digest: prices → sentiment → Gemini analysis → sell recs → send.
 
     Pipeline:
-        get_performance_summary  (skips if insufficient history)
+        get_performance_summary
         → get_all_prices + calculate_portfolio + check_rules
         → get_all_sentiment + get_macro_sentiment
         → get_weekly_analysis      (Gemini + Google Search)
@@ -183,9 +183,7 @@ def run_weekly_digest() -> None:
         sell_recs = "⚠️ Sell recommendations unavailable this week."
 
     # ── 6. Assemble digest ──
-    week_start  = (now - timedelta(days=7)).strftime("%d %b")
-    week_end    = now.strftime("%d %b %Y")
-    date_range  = f"{week_start} – {week_end}"
+    date_range  = now.strftime("%d %b %Y")
     total_value = portfolio_state.get("total_value", 0.0)
 
     seven_day_pct = performance.get("last_7_days_pct")
@@ -212,7 +210,7 @@ def run_weekly_digest() -> None:
     email_body = f"""<!DOCTYPE html>
 <html>
 <body style="font-family: monospace; font-size: 14px; color: #222; max-width: 800px; margin: 0 auto;">
-  <h2>📊 Weekly Digest — {html.escape(date_range)}</h2>
+  <h2>📊 Daily Digest — {html.escape(date_range)}</h2>
 
   <table style="border-collapse: collapse; margin-bottom: 24px;">
     {perf_rows}
@@ -232,7 +230,7 @@ def run_weekly_digest() -> None:
     # ── 7. Send email ──
     print(f"[{ts}] 📧 Sending daily digest email...")
     try:
-        send_weekly_email(f"📊 Finmat Weekly — {date_range}", email_body)
+        send_weekly_email(f"📊 Finmat Daily — {date_range}", email_body)
     except Exception as exc:
         print(f"[{ts}] Email send FAILED: {exc}")
 
@@ -254,12 +252,12 @@ if __name__ == "__main__":
         )
 
     if run_once:
-        run_weekly_digest()
+        run_daily_digest()
         sys.exit(0)
 
     # Schedule recurring jobs
     schedule.every().day.at("13:00").do(run_price_check)   # CRITICAL-only daily check
-    schedule.every().day.at("14:30").do(run_weekly_digest)
+    schedule.every().day.at("14:30").do(run_daily_digest)
 
     try:
         while True:
