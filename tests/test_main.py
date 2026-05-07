@@ -164,22 +164,22 @@ class TestRunPriceCheck:
         assert mocks["send_critical_alert"].call_count == 2
 
 
-# ── run_weekly_digest ─────────────────────────────────────────
+# ── run_daily_digest ──────────────────────────────────────────
 
 
-class TestRunWeeklyDigest:
-    """run_weekly_digest sends digest when enough history exists."""
+class TestRunDailyDigest:
+    """run_daily_digest sends digest when enough history exists."""
 
     def test_calls_send_weekly_email_when_performance_available(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
-            main.run_weekly_digest()
+            main.run_daily_digest()
         mocks["send_weekly_email"].assert_called_once()
 
     def test_calls_get_all_prices_for_current_value(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
-            main.run_weekly_digest()
+            main.run_daily_digest()
         mocks["get_all_prices"].assert_called_once()
 
     def test_does_not_raise_on_failure(self):
@@ -187,7 +187,7 @@ class TestRunWeeklyDigest:
             "main.get_all_prices": MagicMock(side_effect=Exception("network")),
         })
         with patch.multiple("main", **mocks):
-            main.run_weekly_digest()  # must not raise
+            main.run_daily_digest()  # must not raise
 
 
 # ── is_market_open ────────────────────────────────────────────
