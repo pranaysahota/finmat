@@ -18,7 +18,7 @@ from config import (
 )
 from modules.alerts import (
     send_critical_alert,
-    send_weekly_email,
+    send_daily_email,
 )
 from modules.decision_engine import (
     get_weekly_analysis,
@@ -104,7 +104,7 @@ def run_daily_digest() -> None:
         → get_weekly_analysis      (Gemini + Google Search)
         → get_weekly_sell_recommendations  (Gemini, no Search)
         → assemble HTML digest body
-        → send_weekly_email
+        → send_daily_email
 
     Each step is wrapped independently — a failure at any step does not
     prevent subsequent steps from running.
@@ -230,7 +230,7 @@ def run_daily_digest() -> None:
     # ── 7. Send email ──
     print(f"[{ts}] 📧 Sending daily digest email...")
     try:
-        send_weekly_email(f"📊 Finmat Daily — {date_range}", email_body)
+        send_daily_email(f"📊 Finmat Daily — {date_range}", email_body)
     except Exception as exc:
         print(f"[{ts}] Email send FAILED: {exc}")
 

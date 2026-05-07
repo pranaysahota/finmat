@@ -136,7 +136,7 @@ def send_critical_alert(ticker: str, message: str) -> None:
     send_message(text)
 
 
-def send_weekly_email(subject: str, body: str) -> None:
+def send_daily_email(subject: str, body: str) -> None:
     """Send the daily digest as an HTML email via STARTTLS SMTP.
 
     All configuration is loaded from environment variables. If any required
@@ -155,7 +155,7 @@ def send_weekly_email(subject: str, body: str) -> None:
 
     if not all([sender, password, recipient]):
         logging.warning(
-            "send_weekly_email: EMAIL_SENDER, EMAIL_PASSWORD, or EMAIL_RECIPIENT "
+            "send_daily_email: EMAIL_SENDER, EMAIL_PASSWORD, or EMAIL_RECIPIENT "
             "not set — skipping email delivery."
         )
         return
@@ -163,7 +163,7 @@ def send_weekly_email(subject: str, body: str) -> None:
     try:
         port = int(smtp_port)
     except ValueError:
-        logging.warning("send_weekly_email: EMAIL_SMTP_PORT is not a valid integer — skipping.")
+        logging.warning("send_daily_email: EMAIL_SMTP_PORT is not a valid integer — skipping.")
         return
 
     msg = MIMEText(body, "html", "utf-8")
@@ -178,7 +178,7 @@ def send_weekly_email(subject: str, body: str) -> None:
             server.login(sender, password)
             server.sendmail(sender, recipient, msg.as_string())
     except Exception as exc:
-        logging.error("send_weekly_email: SMTP error — %s", exc)
+        logging.error("send_daily_email: SMTP error — %s", exc)
 
 
 # HOW TO CREATE YOUR TELEGRAM BOT:
