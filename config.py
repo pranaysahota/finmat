@@ -86,8 +86,7 @@ DATA_DIR = Path("/data") if os.path.exists("/data") else Path("data/")
 DB_PATH  = DATA_DIR / "finmat.db"
 
 PATHS = {
-    "DATA_DIR":     DATA_DIR,
-    "HISTORY_FILE": DATA_DIR / "portfolio_history.json",   # legacy — snapshots still use JSON
+    "DATA_DIR": DATA_DIR,
 }
 
 # ── Load Private Portfolio ───────────────────────────────────

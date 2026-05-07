@@ -81,7 +81,7 @@ def _patch_pipeline(**overrides):
         "get_weekly_analysis":             MagicMock(return_value="Gemini analysis text."),
         "get_weekly_sell_recommendations": MagicMock(return_value="MSFT — HOLD"),
         "send_critical_alert":             MagicMock(),
-        "send_weekly_email":               MagicMock(),
+        "send_daily_email":               MagicMock(),
         "load_history":                    MagicMock(return_value=[]),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
@@ -170,11 +170,11 @@ class TestRunPriceCheck:
 class TestRunDailyDigest:
     """run_daily_digest sends digest when enough history exists."""
 
-    def test_calls_send_weekly_email_when_performance_available(self):
+    def test_calls_send_daily_email_when_performance_available(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
             main.run_daily_digest()
-        mocks["send_weekly_email"].assert_called_once()
+        mocks["send_daily_email"].assert_called_once()
 
     def test_calls_get_all_prices_for_current_value(self):
         mocks = _patch_pipeline()
