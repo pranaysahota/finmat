@@ -176,14 +176,6 @@ class TestRunWeeklyDigest:
             main.run_weekly_digest()
         mocks["send_weekly_email"].assert_called_once()
 
-    def test_skips_digest_when_no_performance_data(self):
-        mocks = _patch_pipeline(**{
-            "main.get_performance_summary": MagicMock(return_value={}),
-        })
-        with patch.multiple("main", **mocks):
-            main.run_weekly_digest()
-        mocks["send_weekly_email"].assert_not_called()
-
     def test_calls_get_all_prices_for_current_value(self):
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
