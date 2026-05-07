@@ -115,12 +115,9 @@ def run_weekly_digest() -> None:
     # ── 1. Performance summary ──
     try:
         performance = get_performance_summary()
-        if not performance:
-            print(f"[{ts}] Daily Digest skipped — insufficient history")
-            return
     except Exception as exc:
         print(f"[{ts}] Performance summary FAILED: {exc}")
-        return
+        performance = {}
 
     # ── 2. Prices + portfolio state + rules ──
     portfolio = load_portfolio()

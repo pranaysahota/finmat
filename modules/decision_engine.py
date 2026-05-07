@@ -48,7 +48,7 @@ portfolio based in Ireland with a 6-12 month horizon.
 
 PORTFOLIO STRUCTURE:
 - 60% Diversified (MSFT, AAPL, JPM, JNJ, BRK.B, XOM, VZ, LMT)
-- 25% Growth (GOOG, NVDA)
+- 40% Growth (GOOG, NVDA)
 
 WATCHLIST (not yet held — monitor for entry opportunity):
 

@@ -59,6 +59,18 @@ def init_db() -> None:
             cgt_estimate   REAL,
             source         TEXT NOT NULL DEFAULT 'Revolut'
         );
+
+        CREATE TABLE IF NOT EXISTS snapshots (
+            date          TEXT PRIMARY KEY,
+            timestamp     TEXT NOT NULL,
+            total_value   REAL NOT NULL,
+            total_cost    REAL NOT NULL,
+            total_pnl_usd REAL NOT NULL,
+            total_pnl_pct REAL NOT NULL,
+            crypto_weight REAL NOT NULL,
+            bucket_values TEXT NOT NULL,
+            holdings      TEXT NOT NULL
+        );
     """)
     conn.commit()
     conn.close()
