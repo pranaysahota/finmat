@@ -406,7 +406,7 @@ def get_weekly_analysis(
     prompt = "\n".join(lines)
 
     try:
-        client = _get_gemini_client(timeout_ms=120_000)
+        client = _get_gemini_client(timeout_ms=300_000)
         if client is None:
             return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
         return _gemini_generate(
@@ -417,7 +417,11 @@ def get_weekly_analysis(
             ),
         )
     except Exception as exc:
-        print(f"  ⚠️  Gemini weekly analysis error: {exc}")
+        exc_str = str(exc)
+        if "504" in exc_str or "DEADLINE_EXCEEDED" in exc_str:
+            print(f"  ⚠️  Gemini weekly analysis timed out after 5 minutes")
+        else:
+            print(f"  ⚠️  Gemini weekly analysis error: {exc}")
         return "⚠️ Gemini analysis unavailable this week."
 
 
@@ -508,7 +512,7 @@ def get_weekly_sell_recommendations(
     prompt = "\n".join(lines)
 
     try:
-        client = _get_gemini_client()
+        client = _get_gemini_client(timeout_ms=300_000)
         if client is None:
             return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
         return _gemini_generate(
@@ -518,7 +522,11 @@ def get_weekly_sell_recommendations(
             ),
         )
     except Exception as exc:
-        print(f"  ⚠️  Gemini sell recommendations error: {exc}")
+        exc_str = str(exc)
+        if "504" in exc_str or "DEADLINE_EXCEEDED" in exc_str:
+            print(f"  ⚠️  Gemini sell recommendations timed out after 5 minutes")
+        else:
+            print(f"  ⚠️  Gemini sell recommendations error: {exc}")
         return "⚠️ Sell recommendations unavailable this week."
 
 
