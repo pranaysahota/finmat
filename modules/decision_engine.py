@@ -11,13 +11,8 @@ from config import ANTHROPIC_API_KEY, BUCKET_TARGETS, CRYPTO_ACTIVE, RULES
 
 import anthropic
 
-try:
-    from google import genai
-    from google.genai import types as genai_types
-    _GEMINI_AVAILABLE = True
-except Exception as _gemini_init_err:
-    print(f"  ⚠️  Gemini import failed: {_gemini_init_err}")
-    _GEMINI_AVAILABLE = False
+from google import genai
+from google.genai import types as genai_types
 
 _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 _GEMINI_MODEL   = "gemini-3-flash-preview"
@@ -36,11 +31,14 @@ _GEMINI_SELL_SYSTEM = (
 )
 
 
-def _get_gemini_client():
-    """Return a Gemini client, created lazily on first call to avoid network calls at import."""
-    if not _GEMINI_AVAILABLE or not _GEMINI_API_KEY:
+def _get_gemini_client(timeout_ms: int = 60_000):
+    """Return a Gemini client with the given request timeout (milliseconds)."""
+    if not _GEMINI_API_KEY:
         return None
-    return genai.Client(api_key=_GEMINI_API_KEY)
+    return genai.Client(
+        api_key=_GEMINI_API_KEY,
+        http_options=genai_types.HttpOptions(timeout=timeout_ms),
+    )
 
 _SYSTEM_PROMPT_NORMAL = """\
 You are a personal investment advisor monitoring a moderate-risk $8,000 \
@@ -308,7 +306,7 @@ def get_decision(
     system_prompt = _SYSTEM_PROMPT_ALERT if triggered_critical_or_high else _SYSTEM_PROMPT_NORMAL
 
     try:
-        client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0)
         response = client.messages.create(
             model      = "claude-sonnet-4-6",
             max_tokens = 2500,
@@ -345,9 +343,6 @@ def get_weekly_analysis(
     Returns:
         Gemini's formatted analysis string, or a fallback message on any error.
     """
-    if not _GEMINI_AVAILABLE:
-        return "⚠️ Gemini analysis unavailable this week."
-
     # Build ticker → macro themes lookup
     ticker_macro: dict[str, list[tuple[str, str, float]]] = {}
     for theme, data in macro_sentiment.items():
@@ -395,9 +390,9 @@ def get_weekly_analysis(
     prompt = "\n".join(lines)
 
     try:
-        client = _get_gemini_client()
+        client = _get_gemini_client(timeout_ms=120_000)
         if client is None:
-            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set or google-genai not installed."
+            return "⚠️ Gemini unavailable — GEMINI_API_KEY not set."
         response = client.models.generate_content(
             model=_GEMINI_MODEL,
             contents=prompt,
@@ -434,9 +429,6 @@ def get_weekly_sell_recommendations(
     Returns:
         Gemini's structured sell recommendations string, or a fallback message on any error.
     """
-    if not _GEMINI_AVAILABLE:
-        return "⚠️ Sell recommendations unavailable this week."
-
     existing_tickers = list(portfolio_state.get("holdings", {}).keys())
 
     lines: list[str] = [

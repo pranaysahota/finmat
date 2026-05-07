@@ -88,7 +88,7 @@ def score_sentiment(label_for: str, headlines: list[str]) -> dict:
     )
 
     try:
-        client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client   = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=30.0)
         response = client.messages.create(
             model      = "claude-haiku-4-5-20251001",
             max_tokens = 150,

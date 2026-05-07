@@ -27,6 +27,7 @@ from modules.decision_engine import (
 from modules.history import (
     get_performance_summary,
     load_history,
+    save_snapshot,
 )
 from modules.news_sentiment import get_all_sentiment, get_macro_sentiment
 from modules.portfolio import (
@@ -131,6 +132,13 @@ def run_weekly_digest() -> None:
         print(f"[{ts}] Prices/portfolio FAILED: {exc}")
         portfolio_state = {}
         triggered_rules = []
+
+    # ── 2a. Save daily snapshot ──
+    if portfolio_state:
+        try:
+            save_snapshot(portfolio_state)
+        except Exception as exc:
+            print(f"[{ts}] Snapshot save FAILED: {exc}")
 
     # ── 3. Sentiment (stocks only) + macro sentiment ──
     sentiment      = {}
