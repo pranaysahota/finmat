@@ -42,16 +42,20 @@ def _get_gemini_client(timeout_ms: int = 60_000):
     )
 
 
+_GEMINI_TRANSIENT_ERRORS = ("503", "UNAVAILABLE", "504", "DEADLINE_EXCEEDED")
+
+
 def _gemini_generate(client, prompt: str, config: genai_types.GenerateContentConfig) -> str:
-    """Call Gemini with automatic fallback to gemini-2.5-flash on 503 UNAVAILABLE."""
+    """Call Gemini with automatic fallback to gemini-2.5-flash on transient errors (503/504)."""
     try:
         return client.models.generate_content(
             model=_GEMINI_MODEL, contents=prompt, config=config
         ).text.strip()
     except Exception as exc:
-        if "503" not in str(exc) and "UNAVAILABLE" not in str(exc):
+        exc_str = str(exc)
+        if not any(marker in exc_str for marker in _GEMINI_TRANSIENT_ERRORS):
             raise
-        print(f"  ⚠️  {_GEMINI_MODEL} unavailable (503) — retrying with {_GEMINI_MODEL_FALLBACK}")
+        print(f"  ⚠️  {_GEMINI_MODEL} transient error — retrying with {_GEMINI_MODEL_FALLBACK}: {exc_str[:80]}")
         return client.models.generate_content(
             model=_GEMINI_MODEL_FALLBACK, contents=prompt, config=config
         ).text.strip()
