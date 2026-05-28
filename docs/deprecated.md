@@ -7,10 +7,10 @@ before removal. Do not delete listed items in broad sweeps.
 
 | Item | Current status | Use instead | Migration notes |
 | --- | --- | --- | --- |
-| `portfolio/local.py` as canonical holdings storage | Legacy migration/fallback input; gitignored; may be reconstructed from secret only when legacy migration is explicitly enabled | SQLite `holdings` table via `modules/database.py` and `config.load_portfolio()` | Keep until `trade.py`, migration, and ops docs no longer require it. |
+| `portfolio/local.py` as canonical holdings storage | Legacy migration/fallback input; gitignored; may be reconstructed from secret only when legacy migration is explicitly enabled | SQLite `holdings` table via `modules/database.py` and `config.load_portfolio()` | Keep until migration and ops docs no longer require it. |
 | `data/trades.json` as canonical trade log | Legacy migration/fallback input | SQLite `trades` table via `modules/database.py` | Keep migration support until production data is confirmed fully migrated and backups exist. |
 | JSON snapshot file `data/portfolio_history.json` | Historical docs mention it, but current `modules/history.py` stores snapshots in SQLite | SQLite `snapshots` table | Treat any old file as migration/archive context only. |
-| `trade.py` file-writing workflow | Still available, but out of sync with the current dashboard SQLite write path | Dashboard/API trade logging or a future SQLite-backed CLI | Candidate for refactor, not immediate removal. |
+| `trade.py` file-writing workflow | CLI entry point is disabled; legacy helper functions remain for now | Dashboard/API trade logging | Next cleanup should move shared helpers out of `trade.py`, then remove legacy file-writing helpers and tests. |
 
 ## Dead-Code Candidates To Validate
 

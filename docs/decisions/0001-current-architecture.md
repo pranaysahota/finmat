@@ -50,14 +50,15 @@ made safely and deliberately.
   imports side-effectful.
 - SQLite keeps deployment simple but needs care around backups, migrations, and
   single-instance scheduling.
-- `trade.py` and the dashboard currently use different persistence paths.
+- `trade.py` is disabled as a CLI, but still contains legacy helper functions.
 - The Flask dashboard and scheduler run in the same container via
   `entrypoint.sh`, keeping deployment simple while coupling their lifecycles.
 - No formal lint/type/dead-code tooling is configured yet.
 
 ## Future Migration Candidates
 
-- Move `trade.py` to SQLite or remove it after a safe replacement exists.
+- Move shared helpers out of `trade.py`, then remove the disabled legacy CLI and
+  file-writing helpers.
 - Wire `modules/run_logger.py` into `main.py` or remove the unused logger path.
 - Add a small migration framework beyond the current migrations table.
 - Add Ruff formatting/linting and a dead-code detector such as Vulture.
