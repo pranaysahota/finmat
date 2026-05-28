@@ -1,6 +1,6 @@
 # finmat
 
-A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets, runs automated daily briefings via Telegram and weekly HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules. Includes a web dashboard for live portfolio monitoring and trade logging, backed by SQLite.
+A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets, runs automated price checks and daily HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules. Includes a web dashboard for live portfolio monitoring and trade logging, backed by SQLite.
 
 ---
 
@@ -20,15 +20,15 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   ┌───────────────────────────────────────────────────┐  │
   │                  main.py (scheduler)              │  │
   │                                                   │  │
-  │  ┌─ hourly ───────────────────────────────────┐   │  │
+  │  ┌─ daily 13:00 ──────────────────────────────┐   │  │
   │  │  run_price_check()                         │   │  │
   │  │   price_fetcher → portfolio → rules        │   │  │
   │  │        │                                   │   │  │
   │  │        └─ CRITICAL alert? → Telegram       │   │  │
   │  └────────────────────────────────────────────┘   │  │
   │                                                   │  │
-  │  ┌─ daily 13:00 ───────────────────────────────┐  │  │
-  │  │  run_daily_briefing()                       │  │  │
+  │  ┌─ daily 14:30 ───────────────────────────────┐  │  │
+  │  │  run_daily_digest()                         │  │  │
   │  │                                             │  │  │
   │  │   price_fetcher                             │  │  │
   │  │       │                                     │  │  │
@@ -36,8 +36,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   │  │   portfolio.py  ← SQLite DB ◄───────────────┼──┘  │
   │  │   (calc P&L, weights, bucket drift)         │     │
   │  │       │                                     │     │
-  │  │       ├──► history.py  → data/portfolio_    │     │
-  │  │       │                   history.json      │     │
+  │  │       ├──► history.py  → SQLite snapshots   │     │
   │  │       │                                     │     │
   │  │       ├──► news_sentiment.py                │     │
   │  │       │    (Claude Haiku — per ticker       │     │
@@ -50,11 +49,8 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   │  │           alerts.py → Telegram              │     │
   │  └─────────────────────────────────────────────┘     │
   │                                                      │
-  │  ┌─ Sunday 14:30 ──────────────────────────────┐     │
-  │  │  run_weekly_digest()                        │     │
-  │  │   prices → sentiment → Gemini analysis      │     │
-  │  │   → sell recommendations → HTML email       │     │
-  │  └─────────────────────────────────────────────┘     │
+  │  Dashboard endpoint /api/digest can trigger the      │
+  │  same digest pipeline asynchronously.                │
   └──────────────────────────────────────────────────────┘
 ```
 
@@ -85,9 +81,8 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 
 | Job | Schedule | What it does |
 |-----|----------|-------------|
-| `run_price_check()` | Every hour | Prices → portfolio → rules → CRITICAL alert if needed. No AI, no file writes. Completes in under 10 seconds. |
-| `run_daily_briefing()` | Daily 13:00 | Full pipeline: prices → portfolio → snapshot → sentiment → macro themes → AI decision → Telegram. Each step is fault-tolerant — a single failure does not abort the briefing. |
-| `run_weekly_digest()` | Sunday 14:30 | Gemini-powered analysis with per-stock breakdown, sell recommendations, and Irish CGT reminder — delivered as an HTML email. |
+| `run_price_check()` | Daily 13:00 | Prices → portfolio → rules → CRITICAL alert if needed. No AI, no file writes. Completes quickly. |
+| `run_daily_digest()` | Daily 14:30 | Full pipeline: prices → portfolio → SQLite snapshot → sentiment → macro themes → Gemini analysis → sell recommendations → HTML email. Each step is fault-tolerant — a single failure does not abort the digest. |
 
 ### AI Sentiment Analysis (Claude Haiku)
 - **Per-ticker sentiment** — Google News RSS headlines scored for each stock position
@@ -104,24 +99,23 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - All recommendations are **Irish CGT-aware**: 33% CGT on disposal, €1,270 annual exemption, no ETF rebalancing advice, crypto swap tax treatment
 - Response is structured: MARKET MOOD → PORTFOLIO STATUS → WATCH LIST. When a CRITICAL or HIGH alert triggers, a CGT IMPACT section is appended with the Irish tax calculation for each flagged position
 
-### Weekly Digest (Google Gemini)
-- Runs every Sunday at 14:30
+### Daily Email Digest (Google Gemini)
+- Runs every day at 14:30
 - Gemini analyses each stock position using Google Search for up-to-date context
 - Generates sell recommendations with explicit CGT cost calculations
 - Delivered as a formatted **HTML email**
 
 ### Observability
-- **JSONL run logger** (`modules/run_logger.py`) — every pipeline run is recorded with status, duration, step-level outcomes, and error details
-- Logs are persisted to the `data/` volume and survive container restarts
-- `scripts/read_logs.sh` — shell script for tailing and filtering raw JSONL logs
-- `scripts/review_logs.py` — AI-powered log review: summarises recent runs, flags anomalies, and surfaces patterns using Claude
+- Runtime progress and failures are currently printed to process logs
+- `modules/run_logger.py` and `scripts/review_logs.py` exist for JSONL workflow logging/review, but the logger does not appear to be wired into `main.py` yet
+- On Fly.io, use `fly logs --app finmat` as the current operational log source
 
 ### Performance History
-- **Append-only** daily snapshots in `data/portfolio_history.json` — never overwritten
+- **Append-only** daily snapshots in the SQLite `snapshots` table
 - Holdings and trade history persisted in **SQLite** (`data/finmat.db`)
 - Tracks since-inception return, 7-day change, best/worst performers across all snapshots
 - Prevents duplicate snapshots if the agent restarts mid-day
-- Performance summary is included in both the daily briefing and weekly digest
+- Performance summary is included in the daily digest
 
 ### Web Dashboard
 - **Live portfolio view** — summary cards, per-holding table with sortable columns (Stock, Value, P&L), bucket allocation and holdings breakdown charts
@@ -141,13 +135,13 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - Individual stocks are taxed at CGT 33% on actual disposal only
 - Decision engine never recommends rebalancing via disposal without explicitly noting the CGT cost
 - Annual €1,270 exemption is factored into any profit-taking suggestions
-- CGT payment deadlines (15 December for Jan–Nov disposals, 31 January for December) included in weekly digest
+- CGT payment deadlines (15 December for Jan–Nov disposals, 31 January for December) included in the daily digest
 
 ### Deployment
 - **Docker** — `Dockerfile` runs unit tests at build time; build fails if any test fails
 - **docker-compose** — single `docker compose up` to start, with `.env` injected and `restart: unless-stopped`
-- **Fly.io** — deployed to `ams` region as a worker process; CI/CD via GitHub Actions on push to `main`
-- **395 unit tests** covering all modules — all mocked, no real API calls
+- **Fly.io** — deployed to `ams` region with Flask HTTP service and scheduler in one container; CI/CD via GitHub Actions on push to `main`
+- **324 passing tests, 4 skipped** in the current local pytest run
 
 ---
 
@@ -176,12 +170,12 @@ finmat/
 ├── modules/
 │   ├── price_fetcher.py         # Yahoo Finance (+ CoinGecko when CRYPTO_ACTIVE)
 │   ├── portfolio.py             # P&L, weights, bucket drift (pure calc, no I/O)
-│   ├── history.py               # Append-only daily snapshots
+│   ├── history.py               # SQLite daily snapshots
 │   ├── news_sentiment.py        # Headlines → Claude Haiku (per-ticker + macro themes)
-│   ├── decision_engine.py       # Claude Sonnet daily briefing + Gemini weekly digest
+│   ├── decision_engine.py       # Claude/Gemini analysis and recommendations
 │   ├── alerts.py                # Telegram message formatting + sending
 │   ├── database.py              # SQLite persistence — holdings + trades
-│   └── run_logger.py            # JSONL run logger for pipeline observability
+│   └── run_logger.py            # JSONL run logger candidate (not currently wired)
 ├── ui/
 │   ├── app.py                   # Flask REST API + Basic Auth
 │   └── static/index.html        # Single-page dashboard (portfolio, charts, trade form)
@@ -193,9 +187,7 @@ finmat/
 │   ├── todo.md                  # Active task plan
 │   └── lessons.md               # Accumulated project lessons
 └── data/
-    ├── finmat.db                # SQLite database — holdings + trades (gitignored)
-    ├── portfolio_history.json   # Daily snapshots (gitignored)
-    └── logs/                    # JSONL pipeline run logs (gitignored)
+    └── finmat.db                # SQLite database — holdings, trades, snapshots (gitignored)
 ```
 
 ---
@@ -229,12 +221,12 @@ docker compose up
 | Key | Service | Cost | Notes |
 |-----|---------|------|-------|
 | `ANTHROPIC_API_KEY` | Anthropic (Claude) | Pay per token | Haiku for sentiment, Sonnet for daily decisions |
-| `GOOGLE_API_KEY` | Google Gemini | Pay per token | Gemini for weekly digest analysis |
+| `GOOGLE_API_KEY` | Google Gemini | Pay per token | Gemini for daily digest analysis |
 | `TELEGRAM_BOT_TOKEN` | Telegram BotFather | Free | Create via @BotFather |
 | `TELEGRAM_CHAT_ID` | Telegram | Free | Your personal chat ID |
 | `DASHBOARD_USER` | Web dashboard | — | Basic Auth username (default: `finmat`) |
 | `DASHBOARD_PASSWORD` | Web dashboard | — | Basic Auth password (auth disabled if unset) |
-| `EMAIL_*` | SMTP (weekly digest) | Free | Sender/recipient config for weekly email |
+| `EMAIL_*` | SMTP (daily digest) | Free | Sender/recipient config for digest email |
 | Yahoo Finance | Stock prices | Free | No key needed |
 | CoinGecko | Crypto prices | Free | No key needed (used when `CRYPTO_ACTIVE = True`) |
 | Google News RSS | Headlines | Free | No key needed |

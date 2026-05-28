@@ -23,7 +23,8 @@ RUN test -f portfolio/local.py || cp portfolio/local.example.py portfolio/local.
 # Run schema tests — build fails here if any test fails
 RUN python -m pytest tests/ -v
 
-# Entrypoint reconstructs portfolio/local.py from secret then starts the agent
+# Entrypoint starts the SQLite-backed UI + scheduler.
+# Legacy file-to-SQLite migration is opt-in via RUN_SQLITE_MIGRATION=1.
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
