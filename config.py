@@ -1,6 +1,7 @@
 """App-level configuration — safe to commit.
 Contains strategy context, risk rules, bucket targets, and file paths.
-Portfolio holdings live in portfolio/local.py (gitignored).
+Current portfolio holdings are loaded from SQLite via modules/database.py.
+portfolio/local.py is a legacy migration/fallback file only.
 """
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
