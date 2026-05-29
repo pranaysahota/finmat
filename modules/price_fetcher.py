@@ -49,6 +49,37 @@ def get_stock_price(ticker: str) -> float | None:
     return None
 
 
+def get_stock_quote(ticker: str) -> dict | None:
+    """Fetch the latest stock price and previous close from Yahoo Finance.
+
+    Returns:
+        {"current_price": float, "previous_close": float}, or None on any error.
+    """
+    yahoo_ticker = ticker.replace(".", "-")
+    url = YAHOO_URL.format(ticker=yahoo_ticker)
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            response = requests.get(url, headers=HEADERS, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            meta = data["chart"]["result"][0]["meta"]
+            current_price = meta["regularMarketPrice"]
+            previous_close = meta.get("previousClose", meta.get("chartPreviousClose"))
+            if previous_close is None:
+                raise ValueError("previous close unavailable")
+            return {
+                "current_price": round(float(current_price), 2),
+                "previous_close": round(float(previous_close), 2),
+            }
+        except Exception as exc:
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_DELAY)
+            else:
+                print(f"  ⚠️  {ticker}: failed to fetch stock quote — {exc}")
+                return None
+    return None
+
+
 def get_crypto_price(coin_id: str) -> float | None:
     """Fetch the latest USD price for a cryptocurrency from CoinGecko.
 
