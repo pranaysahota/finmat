@@ -1,5 +1,5 @@
 """
-Tests for trade.py — covers pure helper functions and file-modifying functions.
+Tests for trade.py legacy helpers and the disabled CLI entry point.
 PORTFOLIO_FILE, DATA_DIR, and TRADES_FILE are monkeypatched to temp paths for isolation.
 """
 
@@ -24,6 +24,36 @@ from trade import (  # noqa: E402
     _replace_value_at,
     _update_existing_ticker,
 )
+
+
+# ── Deprecated CLI entry point ─────────────────────────────────
+
+class TestDeprecatedMain:
+
+    def test_main_prints_deprecation_and_refuses_legacy_writes(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        portfolio_file = tmp_path / "local.py"
+        portfolio_file.write_text("sentinel portfolio")
+        trades_file = tmp_path / "trades.json"
+
+        monkeypatch.setattr(trade, "PORTFOLIO_FILE", portfolio_file)
+        monkeypatch.setattr(trade, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(trade, "TRADES_FILE", trades_file)
+        monkeypatch.setattr(
+            "builtins.input",
+            lambda *_args, **_kwargs: pytest.fail("deprecated CLI must not prompt"),
+        )
+
+        exit_code = trade.main()
+        output = capsys.readouterr().out
+
+        assert exit_code == 1
+        assert "trade.py is deprecated and disabled" in output
+        assert "/finmat/dashboard.html" in output
+        assert "POST /api/trade" in output
+        assert portfolio_file.read_text() == "sentinel portfolio"
+        assert not trades_file.exists()
 
 
 # ── Shared test data ──────────────────────────────────────────
