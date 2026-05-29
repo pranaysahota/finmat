@@ -261,8 +261,8 @@
   let bucketChart = null;
   let holdingsChart = null;
   let lastPortfolioData = null;
-  let sortKey = null;
-  let sortDir = 'asc';
+  let sortKey = 'pnl_usd';
+  let sortDir = 'desc';
   const AUTO_REFRESH_MS = 30000;
 
   // ── Chart colors ───────────────────────────────────────────
@@ -335,12 +335,15 @@
       sortKey = key;
       sortDir = key === 'ticker' ? 'asc' : 'desc';
     }
-    // Update header classes
+    updateSortHeaders();
+    if (lastPortfolioData) renderTable(lastPortfolioData);
+  }
+
+  function updateSortHeaders() {
     document.querySelectorAll('#portfolio-table th.sortable').forEach(th => {
       th.classList.remove('asc', 'desc');
       if (th.dataset.sort === sortKey) th.classList.add(sortDir);
     });
-    if (lastPortfolioData) renderTable(lastPortfolioData);
   }
 
   function renderTable(data) {
@@ -356,6 +359,7 @@
         return sortDir === 'asc' ? cmp : -cmp;
       });
     }
+    updateSortHeaders();
 
     for (const h of holdings) {
       const tr = document.createElement('tr');
