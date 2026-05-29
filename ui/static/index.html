@@ -263,6 +263,7 @@
   let lastPortfolioData = null;
   let sortKey = null;
   let sortDir = 'asc';
+  const AUTO_REFRESH_MS = 30000;
 
   // ── Chart colors ───────────────────────────────────────────
   const BUCKET_COLORS = { Diversified: '#fbbf24', Growth: '#fb923c', Crypto: '#818cf8' };
@@ -279,12 +280,15 @@
   const pnlClass = (n) => n >= 0 ? 'pos' : 'neg';
 
   // ── Refresh button ─────────────────────────────────────────
-  async function refreshAll() {
+  async function refreshAll(options = {}) {
+    const silent = options.silent === true;
     const btn = document.querySelector('.refresh-btn');
-    btn.classList.add('spinning');
+    if (!silent) btn.classList.add('spinning');
     await Promise.all([loadPortfolio(), loadTransactions(), loadWatchlist()]);
-    btn.classList.remove('spinning');
-    showToast('Data refreshed', 'success');
+    if (!silent) {
+      btn.classList.remove('spinning');
+      showToast('Data refreshed', 'success');
+    }
   }
 
   // ── Load portfolio ──────────────────────────────────────────
@@ -660,6 +664,7 @@
   loadPortfolio();
   loadTransactions();
   loadWatchlist();
+  setInterval(() => refreshAll({ silent: true }), AUTO_REFRESH_MS);
 </script>
 
 </body>
