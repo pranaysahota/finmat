@@ -128,7 +128,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - Trades are logged via the **web dashboard** — buy or sell, with ticker, quantity, and price
 - Calculates new **weighted average buy price**: `(old_qty × old_avg + new_qty × price) / (old_qty + new_qty)`
 - All holdings and trades are persisted in **SQLite** (`data/finmat.db`) via `modules/database.py`
-- `trade.py` CLI is still available as a fallback entry point
+- `trade.py` is a disabled legacy CLI; use the dashboard or `POST /api/trade`
 
 ### Irish Tax Optimisation
 - **No ETFs** — Irish exit tax (38%) + 8-year deemed disposal makes them unfavourable vs individual stocks at CGT 33%
@@ -141,7 +141,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - **Docker** — `Dockerfile` runs unit tests at build time; build fails if any test fails
 - **docker-compose** — single `docker compose up` to start, with `.env` injected and `restart: unless-stopped`
 - **Fly.io** — deployed to `ams` region with Flask HTTP service and scheduler in one container; CI/CD via GitHub Actions on push to `main`
-- **324 passing tests, 4 skipped** in the current local pytest run
+- **325 passing tests, 4 skipped** in the current local pytest run
 
 ---
 
@@ -165,7 +165,7 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 ```
 finmat/
 ├── main.py                      # Scheduler — orchestrates all pipelines
-├── trade.py                     # CLI fallback — log Revolut purchases
+├── trade.py                     # Disabled legacy CLI; helpers still imported by UI
 ├── config.py                    # Settings, alert rules, bucket targets
 ├── modules/
 │   ├── price_fetcher.py         # Yahoo Finance (+ CoinGecko when CRYPTO_ACTIVE)
@@ -241,8 +241,5 @@ After every Revolut purchase, log the trade via the **web dashboard**:
 2. Use the **Log a Trade** form — select buy/sell, enter ticker, quantity, and price
 3. The trade is persisted to SQLite and the portfolio updates immediately
 
-Alternatively, `trade.py` is available as a CLI fallback:
-
-```bash
-python trade.py
-```
+The legacy `trade.py` CLI is disabled so it cannot write stale file-backed
+portfolio data. Running it prints guidance for the dashboard and API.

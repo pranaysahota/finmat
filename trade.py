@@ -1,10 +1,8 @@
-"""CLI tool to log a trade after a Revolut purchase.
+"""Deprecated legacy CLI helpers for file-backed trade logging.
 
-Updates portfolio/local.py in-place (preserving all comments and structure)
-and permanently appends the trade to data/trades.json.
-
-Usage:
-    python trade.py
+The supported trade logging path is now the web dashboard/API, which writes to
+SQLite. Running this module as a script is disabled so it cannot update the old
+portfolio/local.py and data/trades.json files by accident.
 """
 
 import ast
@@ -23,6 +21,18 @@ TRADES_FILE    = DATA_DIR / "trades.json"
 VALID_BUCKETS = {"Diversified", "Growth", "Crypto"}
 VALID_TYPES   = {"stock", "crypto"}
 UNIT          = {"stock": "shares", "crypto": "coins"}
+
+DEPRECATION_MESSAGE = """\
+trade.py is deprecated and disabled.
+
+Use the Finmat dashboard to log trades:
+  /finmat/dashboard.html
+
+Or call the SQLite-backed API directly:
+  POST /api/trade
+
+No legacy files were modified.
+"""
 
 
 # ── Portfolio loading ──────────────────────────────────────────────
@@ -321,127 +331,11 @@ def _run_sell(portfolio: dict) -> None:
 
 # ── Main flow ──────────────────────────────────────────────────────
 
-def main() -> None:
-    print("\n📈 Finance Agent — Log a Trade\n")
-
-    print("  Trade type:")
-    print("  [1] Buy")
-    print("  [2] Sell")
-    side = input("  > ").strip()
-    if side not in ("1", "2"):
-        print("  ❌ Invalid choice. Enter 1 or 2.")
-        sys.exit(1)
-
-    portfolio = _load_portfolio()
-
-    if side == "2":
-        _run_sell(portfolio)
-        return
-
-    # ── Step 1: ticker ───────────────────────────────────────────
-    raw = input("  Ticker / coin (e.g. NVDA, VOO, bitcoin): ").strip()
-    if not raw:
-        print("  ❌ Ticker cannot be empty.")
-        sys.exit(1)
-
-    # Try to find the ticker to determine its type before normalising
-    bucket, asset = _find_ticker(portfolio, raw.upper())
-    if asset is None:
-        bucket, asset = _find_ticker(portfolio, raw.lower())
-
-    asset_type = asset["type"] if asset else None
-    ticker     = _normalise_ticker(raw, asset_type or "stock")
-
-    # ── Step 2: quantity and price ───────────────────────────────
-    qty_bought  = _get_float("  Quantity bought:                          ")
-    price_paid  = _get_float("  Price paid per share/coin (USD):          ")
-    trade_value = round(qty_bought * price_paid, 2)
-
-    # ── Step 3: resolve ticker ───────────────────────────────────
-    is_new = False
-
-    if asset is None:
-        # Re-check with the normalised ticker (handles mixed-case edge cases)
-        bucket, asset = _find_ticker(portfolio, ticker)
-
-    if asset is None:
-        print(f"\n  '{ticker}' not found in your portfolio.")
-        add = input("  Is this a new position? (y/n): ").strip().lower()
-        if add != "y":
-            print("  Aborted.")
-            sys.exit(0)
-
-        bucket     = _get_choice("  Enter bucket (Diversified / Growth / Crypto):  ", VALID_BUCKETS)
-        asset_type = _get_choice("  Enter type   (stock / crypto):          ", VALID_TYPES)
-        ticker     = _normalise_ticker(raw, asset_type)
-        old_qty    = 0.0
-        old_avg    = 0.0
-        is_new     = True
-    else:
-        asset_type = asset["type"]
-        old_qty    = asset["qty"]
-        old_avg    = asset["avg_buy"]
-
-    # ── Step 4: weighted average calculation ─────────────────────
-    new_qty = round(old_qty + qty_bought, 8)
-    new_avg = price_paid if old_qty == 0 else round(
-        (old_qty * old_avg + qty_bought * price_paid) / new_qty, 2
-    )
-
-    # ── Step 5: confirm ──────────────────────────────────────────
-    unit = UNIT[asset_type]
-    print(f"""
-  ─────────────────────────────
-  Ticker:       {ticker}
-  Bought:       {qty_bought} {unit} @ ${price_paid:,.2f}
-  Trade value:  ${trade_value:,.2f}
-  New qty:      {new_qty} {unit}
-  New avg buy:  ${new_avg:,.2f}
-  ─────────────────────────────""")
-
-    confirm = input("\n  Confirm? (y/n): ").strip().lower()
-    if confirm != "y":
-        print("  Aborted — no changes made.")
-        sys.exit(0)
-
-    # ── Step 6: update portfolio/local.py ────────────────────────
-    if is_new:
-        _add_new_ticker(ticker, bucket, asset_type, new_qty, new_avg)
-    else:
-        _update_existing_ticker(ticker, new_qty, new_avg)
-
-    # ── Step 7: log trade ─────────────────────────────────────────
-    trade = {
-        "id":          str(uuid.uuid4()),
-        "timestamp":   datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-        "ticker":      ticker,
-        "bucket":      bucket,
-        "type":        asset_type,
-        "qty_bought":  qty_bought,
-        "price_paid":  price_paid,
-        "trade_value": trade_value,
-        "new_qty":     new_qty,
-        "new_avg_buy": new_avg,
-        "source":      "Revolut",
-    }
-    _append_trade(trade)
-
-    # ── Step 8: confirmation output ───────────────────────────────
-    print(f"""
-  ✓ Trade logged
-  ─────────────────────────────
-  Ticker:       {ticker}
-  Bought:       {qty_bought} {unit} @ ${price_paid:,.2f}
-  Trade value:  ${trade_value:,.2f}
-  New qty:      {new_qty} {unit}
-  New avg buy:  ${new_avg:,.2f}
-  ─────────────────────────────
-  portfolio.local.py updated ✓
-  data/trades.json updated   ✓
-
-  Run 'python main.py' to see the updated briefing.
-""")
+def main() -> int:
+    """Print deprecation guidance and refuse to write legacy files."""
+    print(DEPRECATION_MESSAGE)
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

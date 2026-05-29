@@ -8,8 +8,8 @@ Folder-by-folder guide for future work.
   orchestration, and digest behavior after reading tests.
 - `config.py`: environment loading, rule constants, bucket targets, and SQLite
   portfolio loading. Risky because it runs database initialization at import.
-- `trade.py`: legacy/fallback CLI. Risky because it still writes
-  `portfolio/local.py` and `data/trades.json`.
+- `trade.py`: disabled legacy CLI. Some helpers are still imported by the UI;
+  old file-writing helpers are cleanup candidates.
 - `requirements.txt`: pinned runtime/test dependencies. Avoid adding tools
   without approval.
 - `pytest.ini`: pytest markers/config.
@@ -94,5 +94,5 @@ Higher risk:
 - Persistence schema/CRUD in `modules/database.py`.
 - Import-time behavior in `config.py`.
 - Startup/deployment behavior in `Dockerfile`, `entrypoint.sh`, and `fly.toml`.
-- Trade logging paths in `ui/app.py` and `trade.py`.
+- Trade logging paths in `ui/app.py`; deprecated helpers in `trade.py`.
 - AI prompts that encode Irish tax assumptions.

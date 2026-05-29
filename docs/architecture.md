@@ -24,8 +24,9 @@ for holdings, trades, and snapshots.
 - `modules/alerts.py`: Telegram and email delivery.
 - `modules/run_logger.py`: JSONL workflow logger. It is tested, but current
   `main.py` does not appear to instantiate it.
-- `trade.py`: legacy/fallback CLI that still edits `portfolio/local.py` and
-  `data/trades.json`; the dashboard trade flow writes SQLite directly.
+- `trade.py`: disabled legacy CLI. It still contains helper functions imported
+  by the UI, but running it no longer writes `portfolio/local.py` or
+  `data/trades.json`.
 - `scripts/migrate_to_sqlite.py`: one-time/idempotent migration from legacy file
   storage into SQLite. Not required for a fresh SQLite-only setup.
 
@@ -61,7 +62,7 @@ Price-check flow:
 - `python ui/app.py`: local Flask dashboard on port 5001.
 - `docker compose up`: build/run the container locally.
 - `Dockerfile`/`entrypoint.sh`: production container startup.
-- `python trade.py`: legacy/fallback CLI for file-based trade logging.
+- `python trade.py`: disabled legacy CLI that prints dashboard/API guidance.
 - `python scripts/migrate_to_sqlite.py`: legacy idempotent migration/bootstrap
   only when importing file-backed data.
 
@@ -73,9 +74,9 @@ Price-check flow:
   a fresh empty SQLite database is a valid day-0 state.
 - SQLite WAL mode and foreign keys are enabled per connection.
 - Runtime files under `data/` are gitignored and should not be committed.
-- `portfolio/local.py` and `data/trades.json` are legacy migration/fallback
-  artifacts. They still matter to `trade.py`, `entrypoint.sh`, and migration
-  workflows, but should not be treated as canonical current runtime state.
+- `portfolio/local.py` and `data/trades.json` are legacy migration artifacts.
+  They still matter to migration workflows, but should not be treated as
+  canonical current runtime state.
 
 ## External Integrations
 
@@ -102,8 +103,9 @@ Price-check flow:
 
 ## Known Weak Areas
 
-- Documentation drift exists around the JSON-to-SQLite migration.
-- `trade.py` still writes legacy files while the dashboard writes SQLite.
+- Older task docs may still mention JSON-era workflows.
+- `trade.py` still contains unused legacy file-writing helper functions, though
+  the CLI entry point is disabled.
 - `modules/run_logger.py` is tested but appears not wired into the scheduler.
 - `docs/ops.md` and older task docs may contain pre-SQLite operational steps.
 - No formatter, linter, static type checker, dependency scanner, or dead-code
