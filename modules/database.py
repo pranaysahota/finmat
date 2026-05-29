@@ -71,6 +71,11 @@ def init_db() -> None:
             bucket_values TEXT NOT NULL,
             holdings      TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS watchlist (
+            ticker     TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
     """)
     conn.commit()
     conn.close()
@@ -183,3 +188,60 @@ def get_recent_trades(limit: int = 5) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_realized_pnl() -> float:
+    """Return realized P&L from sell trades that stored a gross_pnl value."""
+    return get_realized_pnl_breakdown()["pnl"]
+
+
+def get_realized_pnl_breakdown() -> dict:
+    """Return realized profit, loss, and net P&L from sell trades."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT
+            COALESCE(SUM(CASE WHEN gross_pnl > 0 THEN gross_pnl ELSE 0 END), 0) AS profit,
+            COALESCE(SUM(CASE WHEN gross_pnl < 0 THEN ABS(gross_pnl) ELSE 0 END), 0) AS loss,
+            COALESCE(SUM(gross_pnl), 0) AS pnl
+        FROM trades
+        WHERE side = 'sell' AND gross_pnl IS NOT NULL
+    """).fetchone()
+    conn.close()
+    return {
+        "profit": round(float(row["profit"]), 2),
+        "loss": round(float(row["loss"]), 2),
+        "pnl": round(float(row["pnl"]), 2),
+    }
+
+
+# ── Watchlist CRUD ────────────────────────────────────────────────
+
+def get_watchlist_tickers() -> list[str]:
+    """Return watchlist tickers in display order."""
+    conn = get_connection()
+    rows = conn.execute("SELECT ticker FROM watchlist ORDER BY ticker").fetchall()
+    conn.close()
+    return [row["ticker"] for row in rows]
+
+
+def add_watchlist_ticker(ticker: str) -> str:
+    """Add a stock ticker to the watchlist and return its normalized symbol."""
+    normalized = ticker.strip().upper()
+    conn = get_connection()
+    conn.execute(
+        "INSERT OR IGNORE INTO watchlist (ticker) VALUES (?)",
+        (normalized,),
+    )
+    conn.commit()
+    conn.close()
+    return normalized
+
+
+def remove_watchlist_ticker(ticker: str) -> bool:
+    """Remove a stock ticker from the watchlist. Returns True when removed."""
+    normalized = ticker.strip().upper()
+    conn = get_connection()
+    cur = conn.execute("DELETE FROM watchlist WHERE ticker = ?", (normalized,))
+    conn.commit()
+    conn.close()
+    return cur.rowcount > 0

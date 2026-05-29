@@ -9,11 +9,13 @@ for holdings, trades, and snapshots.
 - `main.py`: scheduler entry point. Runs market-hours price checks and the daily
   digest pipeline.
 - `ui/app.py`: Flask REST API and dashboard server. Provides portfolio views,
-  trade logging, recent trades, and manual digest triggering.
+  trade logging, watchlist management, recent trades, and manual digest
+  triggering.
 - `modules/database.py`: SQLite persistence layer for holdings, trades,
-  migrations, and snapshots.
+  watchlist tickers, migrations, and snapshots.
 - `modules/price_fetcher.py`: market price retrieval from Yahoo Finance and,
-  when crypto is enabled, CoinGecko-style crypto endpoints.
+  when crypto is enabled, CoinGecko-style crypto endpoints. The dashboard
+  watchlist also uses Yahoo chart metadata for current price and previous close.
 - `modules/portfolio.py`: pure portfolio calculations and risk rule checks.
 - `modules/history.py`: snapshot persistence and performance summaries backed by
   SQLite.
@@ -38,6 +40,16 @@ Dashboard trade flow:
 2. `ui/app.py` validates the request.
 3. `modules.database.upsert_holding()` and `insert_trade()` update SQLite.
 4. Future calls to `config.load_portfolio()` read holdings from SQLite.
+
+Dashboard watchlist flow:
+
+1. User adds or removes a ticker in `ui/static/index.html`.
+2. `ui/app.py` validates and normalizes stock tickers through
+   `modules.database` watchlist helpers.
+3. `GET /api/watchlist` reads the persisted ticker list and fetches current
+   price plus previous close from Yahoo Finance.
+4. Quote failures are returned as unavailable row values without removing the
+   ticker.
 
 Scheduled digest flow:
 
@@ -72,6 +84,11 @@ Price-check flow:
   `/data/finmat.db` on Fly.io.
 - Tables are created in `modules/database.init_db()` at import/startup time, so
   a fresh empty SQLite database is a valid day-0 state.
+- The dashboard stores watchlist stock tickers in SQLite. Watchlist rows are
+  independent from portfolio holdings and trades.
+- Realized profit, loss, and net P&L are derived from `gross_pnl` on sell
+  trades only. Open-position P&L remains the portfolio calculation output from
+  current value minus cost basis.
 - SQLite WAL mode and foreign keys are enabled per connection.
 - Runtime files under `data/` are gitignored and should not be committed.
 - `portfolio/local.py` and `data/trades.json` are legacy migration artifacts.
