@@ -17,6 +17,7 @@ from modules.price_fetcher import (  # noqa: E402
     MAX_RETRIES,
     get_all_prices,
     get_crypto_price,
+    get_stock_quote,
     get_stock_price,
 )
 
@@ -26,6 +27,12 @@ from modules.price_fetcher import (  # noqa: E402
 YAHOO_SUCCESS = {
     "chart": {
         "result": [{"meta": {"regularMarketPrice": 415.75}}]
+    }
+}
+
+YAHOO_QUOTE_SUCCESS = {
+    "chart": {
+        "result": [{"meta": {"regularMarketPrice": 110.25, "previousClose": 100.00}}]
     }
 }
 
@@ -112,6 +119,37 @@ class TestGetStockPrice:
             get_stock_price("MSFT")
         headers = mock_get.call_args.kwargs.get("headers", {})
         assert "User-Agent" in headers
+
+
+# ── get_stock_quote ───────────────────────────────────────────
+
+class TestGetStockQuote:
+
+    def test_returns_current_price_and_previous_close_on_success(self):
+        with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_QUOTE_SUCCESS)):
+            quote = get_stock_quote("MSFT")
+        assert quote == {"current_price": 110.25, "previous_close": 100.00}
+
+    def test_uses_chart_previous_close_fallback(self):
+        data = {
+            "chart": {
+                "result": [{"meta": {"regularMarketPrice": 110.25, "chartPreviousClose": 99.50}}]
+            }
+        }
+        with patch("modules.price_fetcher.requests.get", return_value=_http_ok(data)):
+            quote = get_stock_quote("MSFT")
+        assert quote == {"current_price": 110.25, "previous_close": 99.50}
+
+    def test_returns_none_when_previous_close_missing(self):
+        with patch("modules.price_fetcher.requests.get", return_value=_http_ok(YAHOO_SUCCESS)):
+            with patch("modules.price_fetcher.time.sleep"):
+                assert get_stock_quote("MSFT") is None
+
+    def test_retries_correct_number_of_times(self):
+        with patch("modules.price_fetcher.requests.get", side_effect=Exception("err")) as mock_get:
+            with patch("modules.price_fetcher.time.sleep"):
+                get_stock_quote("MSFT")
+        assert mock_get.call_count == MAX_RETRIES + 1
 
 
 # ── get_crypto_price ──────────────────────────────────────────
