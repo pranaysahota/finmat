@@ -26,6 +26,15 @@ MOCK_PRICES = {
     "bitcoin": 96000.0, "ethereum": 2750.0,
 }
 
+MOCK_PORTFOLIO = {
+    "Diversified": {
+        "MSFT": {"type": "stock", "qty": 3, "avg_buy": 400.0},
+    },
+    "Growth": {
+        "NVDA": {"type": "stock", "qty": 5, "avg_buy": 135.0},
+    },
+}
+
 MOCK_STATE = {
     "total_value":    8200.0,
     "total_cost":     8000.0,
@@ -37,6 +46,8 @@ MOCK_STATE = {
     "holdings": {
         "MSFT": {"current_price": 430.0, "current_value": 1290.0,
                  "cost_basis": 1200.0, "pnl_pct": 7.5, "pnl_usd": 90.0, "bucket": "Diversified"},
+        "NVDA": {"current_price": 140.0, "current_value": 700.0,
+                 "cost_basis": 675.0, "pnl_pct": 3.7, "pnl_usd": 25.0, "bucket": "Growth"},
     },
 }
 
@@ -83,6 +94,10 @@ def _patch_pipeline(**overrides):
         "send_critical_alert":             MagicMock(),
         "send_daily_email":               MagicMock(),
         "load_history":                    MagicMock(return_value=[]),
+        "load_portfolio":                  MagicMock(return_value=MOCK_PORTFOLIO),
+        "save_snapshot":                   MagicMock(),
+        "get_watchlist_tickers":           MagicMock(return_value=[]),
+        "get_stock_price":                 MagicMock(return_value=250.0),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
     stripped = {k.removeprefix("main."): v for k, v in overrides.items()}
@@ -188,6 +203,70 @@ class TestRunDailyDigest:
         })
         with patch.multiple("main", **mocks):
             main.run_daily_digest()  # must not raise
+
+    def test_scopes_sentiment_to_growth_and_watchlist(self):
+        real_calculate = main.calculate_portfolio
+        mocks = _patch_pipeline(**{
+            "main.calculate_portfolio": MagicMock(
+                side_effect=lambda prices, portfolio=None: real_calculate(prices, portfolio)
+            ),
+            "main.get_watchlist_tickers": MagicMock(return_value=["TSLA", "NVDA"]),
+        })
+        with patch.multiple("main", **mocks):
+            main.run_daily_digest()
+
+        mocks["get_all_sentiment"].assert_called_once_with(["NVDA", "TSLA"])
+
+    def test_daily_analysis_state_excludes_diversified_and_includes_watchlist(self):
+        real_calculate = main.calculate_portfolio
+        mocks = _patch_pipeline(**{
+            "main.calculate_portfolio": MagicMock(
+                side_effect=lambda prices, portfolio=None: real_calculate(prices, portfolio)
+            ),
+            "main.get_watchlist_tickers": MagicMock(return_value=["TSLA"]),
+        })
+        with patch.multiple("main", **mocks):
+            main.run_daily_digest()
+
+        analysis_state = mocks["get_weekly_analysis"].call_args.args[0]
+        assert set(analysis_state["holdings"]) == {"NVDA", "TSLA"}
+        assert analysis_state["holdings"]["TSLA"]["bucket"] == "Watchlist"
+
+
+class TestRunWeeklyDigest:
+    """run_weekly_digest sends an all-stock held-position briefing."""
+
+    def test_scopes_sentiment_to_all_held_stocks(self):
+        mocks = _patch_pipeline()
+        with patch.multiple("main", **mocks):
+            main.run_weekly_digest()
+
+        mocks["get_all_sentiment"].assert_called_once_with(["MSFT", "NVDA"])
+        mocks["get_watchlist_tickers"].assert_not_called()
+
+
+class TestConfigureScheduler:
+    """configure_scheduler registers production briefing cadence."""
+
+    def test_registers_noon_daily_and_saturday_weekly_jobs(self):
+        main.schedule.clear()
+        try:
+            main.configure_scheduler()
+            jobs = [
+                (
+                    job.unit,
+                    getattr(job, "start_day", None),
+                    job.at_time.strftime("%H:%M"),
+                    job.job_func.func.__name__,
+                )
+                for job in main.schedule.jobs
+            ]
+
+            assert ("days", None, "13:00", "run_price_check") in jobs
+            assert ("days", None, "12:00", "run_daily_digest") in jobs
+            assert ("weeks", "saturday", "12:00", "run_weekly_digest") in jobs
+        finally:
+            main.schedule.clear()
 
 
 # ── is_market_open ────────────────────────────────────────────

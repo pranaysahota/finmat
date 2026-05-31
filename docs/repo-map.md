@@ -73,6 +73,8 @@ marked with `integration`.
 
 - `architecture.md`: current architecture baseline.
 - `ops.md`: operational notes. Verify against code before following old steps.
+- `stock-analysis-evals-approach.html`: phone-readable proposal for evaluating
+  non-deterministic stock-analysis outputs.
 - `playbooks/`: mode-specific workflow guides.
 - `decisions/`: ADRs.
 - `deprecated.md`: deprecated patterns and dead-code candidates.
