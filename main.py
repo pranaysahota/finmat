@@ -350,7 +350,7 @@ def run_daily_digest() -> None:
 
 
 def run_weekly_digest() -> None:
-    """Saturday 12:00 briefing for all held stock positions."""
+    """Sunday 12:00 briefing for all held stock positions."""
     portfolio = load_portfolio()
     _run_briefing(
         label="Weekly All-Stock Briefing",
@@ -364,7 +364,7 @@ def configure_scheduler() -> None:
     """Register recurring production jobs."""
     schedule.every().day.at(PRICE_CHECK_TIME).do(run_price_check)
     schedule.every().day.at(BRIEFING_TIME).do(run_daily_digest)
-    schedule.every().saturday.at(BRIEFING_TIME).do(run_weekly_digest)
+    schedule.every().sunday.at(BRIEFING_TIME).do(run_weekly_digest)
 
 
 if __name__ == "__main__":

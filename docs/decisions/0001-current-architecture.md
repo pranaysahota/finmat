@@ -19,7 +19,7 @@ made safely and deliberately.
 
 - Python 3.12 application.
 - `main.py` runs scheduled price checks, daily Growth plus watchlist briefings,
-  and Saturday all-stock briefings.
+  and Sunday all-stock briefings.
 - `ui/app.py` runs a Flask dashboard/API on port 5001.
 - SQLite is the canonical persistence layer for holdings, trades, and snapshots.
 - Fresh day-0 SQLite setup is valid without legacy migration; startup creates

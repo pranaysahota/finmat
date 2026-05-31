@@ -248,7 +248,7 @@ class TestRunWeeklyDigest:
 class TestConfigureScheduler:
     """configure_scheduler registers production briefing cadence."""
 
-    def test_registers_noon_daily_and_saturday_weekly_jobs(self):
+    def test_registers_noon_daily_and_sunday_weekly_jobs(self):
         main.schedule.clear()
         try:
             main.configure_scheduler()
@@ -264,7 +264,7 @@ class TestConfigureScheduler:
 
             assert ("days", None, "13:00", "run_price_check") in jobs
             assert ("days", None, "12:00", "run_daily_digest") in jobs
-            assert ("weeks", "saturday", "12:00", "run_weekly_digest") in jobs
+            assert ("weeks", "sunday", "12:00", "run_weekly_digest") in jobs
         finally:
             main.schedule.clear()
 

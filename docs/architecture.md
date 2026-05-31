@@ -7,7 +7,7 @@ for holdings, trades, and snapshots.
 ## Main Components
 
 - `main.py`: scheduler entry point. Runs market-hours price checks, the daily
-  Growth plus watchlist briefing, and the Saturday all-stock briefing.
+  Growth plus watchlist briefing, and the Sunday all-stock briefing.
 - `ui/app.py`: Flask REST API and dashboard server. Provides portfolio views,
   trade logging, watchlist management, recent trades, and manual digest
   triggering.
