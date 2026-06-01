@@ -89,7 +89,7 @@ def _patch_pipeline(**overrides):
         "get_performance_summary":         MagicMock(return_value=MOCK_PERFORMANCE),
         "get_all_sentiment":               MagicMock(return_value=MOCK_SENTIMENT),
         "get_macro_sentiment":             MagicMock(return_value={}),
-        "get_weekly_analysis":             MagicMock(return_value="Gemini analysis text."),
+        "get_stock_analysis":              MagicMock(return_value="Gemini analysis text."),
         "get_weekly_sell_recommendations": MagicMock(return_value="MSFT — HOLD"),
         "send_critical_alert":             MagicMock(),
         "send_daily_email":               MagicMock(),
@@ -215,7 +215,9 @@ class TestRunDailyDigest:
         with patch.multiple("main", **mocks):
             main.run_daily_digest()
 
-        mocks["get_all_sentiment"].assert_called_once_with(["NVDA", "TSLA"])
+        mocks["get_all_sentiment"].assert_called_once_with(["NVDA", "TSLA"], max_age_hours=24)
+        mocks["get_macro_sentiment"].assert_called_once()
+        assert mocks["get_macro_sentiment"].call_args.kwargs == {"max_age_hours": 24}
 
     def test_daily_analysis_state_excludes_diversified_and_includes_watchlist(self):
         real_calculate = main.calculate_portfolio
@@ -228,9 +230,22 @@ class TestRunDailyDigest:
         with patch.multiple("main", **mocks):
             main.run_daily_digest()
 
-        analysis_state = mocks["get_weekly_analysis"].call_args.args[0]
+        analysis_state = mocks["get_stock_analysis"].call_args.args[0]
         assert set(analysis_state["holdings"]) == {"NVDA", "TSLA"}
         assert analysis_state["holdings"]["TSLA"]["bucket"] == "Watchlist"
+
+    def test_daily_analysis_uses_daily_mode_and_no_summary_table(self):
+        mocks = _patch_pipeline()
+        with patch.multiple("main", **mocks):
+            main.run_daily_digest()
+
+        analysis_kwargs = mocks["get_stock_analysis"].call_args.kwargs
+        assert analysis_kwargs["briefing_mode"] == "daily"
+        assert analysis_kwargs["news_window_label"] == "last 24 hours"
+        mocks["get_performance_summary"].assert_not_called()
+        email_body = mocks["send_daily_email"].call_args.args[1]
+        assert "Portfolio value" not in email_body
+        assert "Best performer" not in email_body
 
 
 class TestRunWeeklyDigest:
@@ -241,8 +256,34 @@ class TestRunWeeklyDigest:
         with patch.multiple("main", **mocks):
             main.run_weekly_digest()
 
-        mocks["get_all_sentiment"].assert_called_once_with(["MSFT", "NVDA"])
+        mocks["get_all_sentiment"].assert_called_once_with(["MSFT", "NVDA"], max_age_hours=168)
         mocks["get_watchlist_tickers"].assert_not_called()
+
+    def test_uses_weekly_mode_and_includes_summary_table(self):
+        mocks = _patch_pipeline()
+        with patch.multiple("main", **mocks):
+            main.run_weekly_digest()
+
+        analysis_kwargs = mocks["get_stock_analysis"].call_args.kwargs
+        assert analysis_kwargs["briefing_mode"] == "weekly"
+        assert analysis_kwargs["news_window_label"] == "last week"
+        email_body = mocks["send_daily_email"].call_args.args[1]
+        assert "Portfolio value" in email_body
+        assert "Best performer" in email_body
+        assert "Since inception" in email_body
+
+    def test_gets_performance_summary_after_snapshot_save(self):
+        calls = []
+        mocks = _patch_pipeline(**{
+            "main.save_snapshot": MagicMock(side_effect=lambda *_: calls.append("snapshot")),
+            "main.get_performance_summary": MagicMock(
+                side_effect=lambda: calls.append("performance") or MOCK_PERFORMANCE
+            ),
+        })
+        with patch.multiple("main", **mocks):
+            main.run_weekly_digest()
+
+        assert calls == ["snapshot", "performance"]
 
 
 class TestConfigureScheduler:

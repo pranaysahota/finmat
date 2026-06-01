@@ -12,7 +12,12 @@ import pytest
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from modules.decision_engine import _FALLBACK_DECISION, build_context, get_decision
+from modules.decision_engine import (
+    _FALLBACK_DECISION,
+    build_context,
+    get_decision,
+    get_stock_analysis,
+)
 
 
 # ── Shared test fixtures ──────────────────────────────────────
@@ -62,6 +67,27 @@ PERFORMANCE = {
     "total_snapshots":     8,
     "first_date":          "2026-02-17",
     "latest_date":         "2026-02-24",
+}
+
+WATCHLIST_STATE = {
+    "total_value": 700.0,
+    "total_cost": 675.0,
+    "total_pnl_usd": 25.0,
+    "total_pnl_pct": 3.7,
+    "bucket_values": {"Growth": 700.0},
+    "bucket_weights": {"Growth": 100.0},
+    "holdings": {
+        "NVDA": {
+            "current_price": 140.0, "current_value": 700.0,
+            "cost_basis": 675.0, "pnl_pct": 3.7,
+            "pnl_usd": 25.0, "bucket": "Growth",
+        },
+        "TSLA": {
+            "current_price": 250.0, "current_value": 0.0,
+            "cost_basis": 0.0, "pnl_pct": 0.0,
+            "pnl_usd": 0.0, "bucket": "Watchlist",
+        },
+    },
 }
 
 
@@ -178,6 +204,58 @@ class TestBuildContext:
     def test_holding_pnl_pct_in_context(self):
         ctx = build_context(PORTFOLIO_STATE, [], [], {}, {}, {})
         assert "+7.5%" in ctx
+
+
+# ── get_stock_analysis ───────────────────────────────────────
+
+
+class TestGetStockAnalysis:
+    """get_stock_analysis builds strict daily/weekly Gemini prompts."""
+
+    def _capture_prompt(self, **kwargs) -> str:
+        with patch("modules.decision_engine._get_gemini_client", return_value=MagicMock()):
+            with patch("modules.decision_engine._gemini_generate", return_value="ok") as mock_generate:
+                get_stock_analysis(WATCHLIST_STATE, PERFORMANCE, SENTIMENT, {}, **kwargs)
+        return mock_generate.call_args.args[1]
+
+    def test_daily_prompt_requires_daily_sections(self):
+        prompt = self._capture_prompt(
+            briefing_mode="daily",
+            news_window_label="last 24 hours",
+        )
+
+        assert "last 24 hours" in prompt
+        assert "Daily Recap:" in prompt
+        assert "Analyst Consensus:" in prompt
+        assert "Investment Thesis:" in prompt
+        assert "Forward Outlook:" in prompt
+
+    def test_weekly_prompt_requires_weekly_sections(self):
+        prompt = self._capture_prompt(
+            briefing_mode="weekly",
+            news_window_label="last week",
+        )
+
+        assert "last week" in prompt
+        assert "Weekly Recap:" in prompt
+        assert "Analyst Consensus:" in prompt
+        assert "Investment Thesis:" in prompt
+        assert "Forward Outlook:" in prompt
+
+    def test_watchlist_prompt_requires_entry_and_target_sections(self):
+        prompt = self._capture_prompt(
+            briefing_mode="daily",
+            news_window_label="last 24 hours",
+        )
+
+        assert "Current Price / Analyst Target:" in prompt
+        assert "Entry Watch:" in prompt
+        assert "current price supplied below" in prompt
+        assert "analyst consensus target price" in prompt
+        assert "good entry point" in prompt
+        assert "support/resistance" in prompt
+        assert "TSLA (Watchlist)" in prompt
+        assert "Current price: $250.00" in prompt
 
 
 # ── get_decision ──────────────────────────────────────────────

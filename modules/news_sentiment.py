@@ -2,6 +2,8 @@
 
 import json
 import sys
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import feedparser
@@ -18,7 +20,25 @@ _NEUTRAL = {"score": 0.0, "label": "NEUTRAL", "summary": "No news found."}
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
 
-def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
+def _entry_published_at(entry) -> datetime | None:
+    """Return a timezone-aware publication datetime for a feed entry when available."""
+    parsed = getattr(entry, "published_parsed", None) or getattr(entry, "updated_parsed", None)
+    if isinstance(parsed, (list, tuple)) and len(parsed) >= 6:
+        return datetime(*parsed[:6], tzinfo=timezone.utc)
+
+    raw = getattr(entry, "published", None) or getattr(entry, "updated", None)
+    if isinstance(raw, str) and raw:
+        try:
+            dt = parsedate_to_datetime(raw)
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except Exception:
+            return None
+    return None
+
+
+def fetch_news(urls: list[str], max_items: int = 5, max_age_hours: int | None = None) -> list[str]:
     """Fetch and aggregate headlines from a list of RSS feed URLs.
 
     Pre-fetches each URL with requests (browser User-Agent) then passes the
@@ -29,6 +49,8 @@ def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
         urls:      List of RSS feed URLs to fetch from.
         max_items: Maximum headlines to collect from each feed and to return
                    in total (default 5).
+        max_age_hours: Optional freshness window. Timestamped entries older
+                       than this are skipped; untimestamped entries are kept.
 
     Returns:
         Deduplicated list of headline title strings, up to max_items.
@@ -36,19 +58,29 @@ def fetch_news(urls: list[str], max_items: int = 5) -> list[str]:
     """
     seen:      set[str]  = set()
     headlines: list[str] = []
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+        if max_age_hours is not None
+        else None
+    )
 
     for url in urls:
         try:
             response = _requests.get(url, headers=_HEADERS, timeout=10)
             feed     = feedparser.parse(response.content)
-            items    = [entry.title for entry in feed.entries[:max_items]]
+            entries  = feed.entries[:max_items]
         except Exception:
             continue  # dead feed — skip silently
 
-        if not items:
+        if not entries:
             continue
 
-        for title in items:
+        for entry in entries:
+            published_at = _entry_published_at(entry)
+            if cutoff is not None and published_at is not None and published_at < cutoff:
+                continue
+
+            title = entry.title
             if title not in seen:
                 seen.add(title)
                 headlines.append(title)
@@ -120,7 +152,7 @@ def score_sentiment(label_for: str, headlines: list[str]) -> dict:
         return dict(_NEUTRAL)
 
 
-def get_all_sentiment(tickers: list[str]) -> dict:
+def get_all_sentiment(tickers: list[str], max_age_hours: int | None = None) -> dict:
     """Fetch headlines and score sentiment for a list of stock tickers.
 
     Uses NEWS_SOURCES["ticker_specific"] URL templates, fetching from multiple
@@ -129,6 +161,7 @@ def get_all_sentiment(tickers: list[str]) -> dict:
 
     Args:
         tickers: List of ticker symbols to analyse. Crypto tickers are ignored.
+        max_age_hours: Optional freshness window passed to fetch_news().
 
     Returns:
         Dict of {ticker: sentiment_dict} for every stock ticker in the list.
@@ -142,7 +175,7 @@ def get_all_sentiment(tickers: list[str]) -> dict:
     for n, ticker in enumerate(stock_tickers, 1):
         urls      = [tmpl.format(ticker=ticker) for tmpl in NEWS_SOURCES["ticker_specific"]]
         print(f"  📰 Fetching sentiment: {ticker} ({n} of {total})")
-        headlines = fetch_news(urls, max_items=5)
+        headlines = fetch_news(urls, max_items=5, max_age_hours=max_age_hours)
         sentiment = score_sentiment(ticker, headlines)
         results[ticker] = sentiment
         print(f"  📰 {ticker:<12} {sentiment['label']} ({sentiment['score']:+.2f})")
@@ -150,7 +183,7 @@ def get_all_sentiment(tickers: list[str]) -> dict:
     return results
 
 
-def get_macro_sentiment(portfolio_state: dict) -> dict:
+def get_macro_sentiment(portfolio_state: dict, max_age_hours: int | None = None) -> dict:
     """Fetch and score sentiment for cross-position macro themes.
 
     Builds URL lists from the NEWS_SOURCES registry for each theme.
@@ -160,6 +193,7 @@ def get_macro_sentiment(portfolio_state: dict) -> dict:
     Args:
         portfolio_state: Dict as returned by calculate_portfolio(). Reserved for
                          future dynamic theme generation.
+        max_age_hours: Optional freshness window passed to fetch_news().
 
     Returns:
         Dict keyed by theme label, each value containing score, label, summary,
@@ -203,7 +237,7 @@ def get_macro_sentiment(portfolio_state: dict) -> dict:
     try:
         for theme in _THEMES:
             print(f"  🌐 {theme['label_for']:<25} fetching headlines…")
-            headlines = fetch_news(theme["urls"], max_items=8)
+            headlines = fetch_news(theme["urls"], max_items=8, max_age_hours=max_age_hours)
             sentiment = score_sentiment(theme["label_for"], headlines)
             results[theme["label_for"]] = {
                 **sentiment,
