@@ -5,6 +5,7 @@ All network and API calls are mocked; no real requests are made.
 
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -38,6 +39,18 @@ class TestFetchNews:
         """Build a fake feedparser result with the given entry titles."""
         feed = MagicMock()
         feed.entries = [MagicMock(title=t) for t in titles]
+        return feed
+
+    def _entry(self, title: str, published_at: datetime | None = None) -> MagicMock:
+        entry = MagicMock()
+        entry.title = title
+        if published_at is not None:
+            entry.published_parsed = published_at.utctimetuple()
+        return entry
+
+    def _make_entry_feed(self, entries: list[MagicMock]) -> MagicMock:
+        feed = MagicMock()
+        feed.entries = entries
         return feed
 
     def _mock_response(self, content: bytes = b"<rss/>") -> MagicMock:
@@ -156,6 +169,29 @@ class TestFetchNews:
             with patch("modules.news_sentiment.feedparser.parse", return_value=feed) as mock_parse:
                 fetch_news(["https://example.com/feed"])
         mock_parse.assert_called_once_with(raw_content)
+
+    def test_max_age_keeps_recent_timestamped_entries(self):
+        recent = datetime.now(timezone.utc) - timedelta(hours=2)
+        feed = self._make_entry_feed([self._entry("Fresh headline", recent)])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=feed):
+                result = fetch_news(["https://example.com/feed"], max_age_hours=24)
+        assert result == ["Fresh headline"]
+
+    def test_max_age_drops_stale_timestamped_entries(self):
+        stale = datetime.now(timezone.utc) - timedelta(hours=25)
+        feed = self._make_entry_feed([self._entry("Stale headline", stale)])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=feed):
+                result = fetch_news(["https://example.com/feed"], max_age_hours=24)
+        assert result == []
+
+    def test_max_age_keeps_untimestamped_entries_as_fallback(self):
+        feed = self._make_feed(["Untimestamped headline"])
+        with patch("modules.news_sentiment._requests.get", return_value=self._mock_response()):
+            with patch("modules.news_sentiment.feedparser.parse", return_value=feed):
+                result = fetch_news(["https://example.com/feed"], max_age_hours=24)
+        assert result == ["Untimestamped headline"]
 
 
 # ── score_sentiment ───────────────────────────────────────────
@@ -309,6 +345,12 @@ class TestGetAllSentiment:
         urls = mock_fetch.call_args.args[0]
         assert isinstance(urls, list)
         assert any("MSFT" in u for u in urls)
+
+    def test_max_age_hours_passed_to_fetch_news(self):
+        with patch("modules.news_sentiment.fetch_news", return_value=[]) as mock_fetch:
+            with patch("modules.news_sentiment.score_sentiment", return_value=self.MOCK_SENTIMENT):
+                get_all_sentiment(["MSFT"], max_age_hours=24)
+        assert mock_fetch.call_args.kwargs["max_age_hours"] == 24
 
     def test_crypto_ticker_is_skipped(self):
         with patch("modules.news_sentiment.fetch_news", return_value=[]) as mock_fetch:
