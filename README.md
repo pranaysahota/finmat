@@ -27,8 +27,9 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
   │  │        └─ CRITICAL alert? → Telegram       │   │  │
   │  └────────────────────────────────────────────┘   │  │
   │                                                   │  │
-  │  ┌─ daily 14:30 ───────────────────────────────┐  │  │
-  │  │  run_daily_digest()                         │  │  │
+  │  ┌─ briefing path ─────────────────────────────┐  │  │
+  │  │  daily 12:00: Growth + watchlist            │  │  │
+  │  │  Sun 12:00: all held stocks                 │  │  │
   │  │                                             │  │  │
   │  │   price_fetcher                             │  │  │
   │  │       │                                     │  │  │
@@ -82,7 +83,8 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 | Job | Schedule | What it does |
 |-----|----------|-------------|
 | `run_price_check()` | Daily 13:00 | Prices → portfolio → rules → CRITICAL alert if needed. No AI, no file writes. Completes quickly. |
-| `run_daily_digest()` | Daily 14:30 | Full pipeline: prices → portfolio → SQLite snapshot → sentiment → macro themes → Gemini analysis → sell recommendations → HTML email. Each step is fault-tolerant — a single failure does not abort the digest. |
+| `run_daily_digest()` | Daily 12:00 | Growth holdings + watchlist pipeline: prices → portfolio → SQLite snapshot → scoped sentiment → macro themes → Gemini analysis → sell recommendations for held Growth positions → HTML email. Each step is fault-tolerant — a single failure does not abort the digest. |
+| `run_weekly_digest()` | Sunday 12:00 | All held stock positions pipeline: prices → portfolio → SQLite snapshot → all-stock sentiment → macro themes → Gemini analysis → sell recommendations → HTML email. |
 
 ### AI Sentiment Analysis (Claude Haiku)
 - **Per-ticker sentiment** — Google News RSS headlines scored for each stock position
@@ -100,8 +102,9 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 - Response is structured: MARKET MOOD → PORTFOLIO STATUS → WATCH LIST. When a CRITICAL or HIGH alert triggers, a CGT IMPACT section is appended with the Irish tax calculation for each flagged position
 
 ### Daily Email Digest (Google Gemini)
-- Runs every day at 14:30
-- Gemini analyses each stock position using Google Search for up-to-date context
+- Runs every day at 12:00 for Growth holdings plus watchlist tickers
+- A weekly all-stock briefing runs every Sunday at 12:00
+- Gemini analyses each scoped stock or watchlist ticker using Google Search for up-to-date context
 - Generates sell recommendations with explicit CGT cost calculations
 - Delivered as a formatted **HTML email**
 
