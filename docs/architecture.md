@@ -6,8 +6,8 @@ for holdings, trades, and snapshots.
 
 ## Main Components
 
-- `main.py`: scheduler entry point. Runs market-hours price checks and the daily
-  digest pipeline.
+- `main.py`: scheduler entry point. Runs market-hours price checks, the daily
+  Growth plus watchlist briefing, and the Sunday all-stock briefing.
 - `ui/app.py`: Flask REST API and dashboard server. Provides portfolio views,
   trade logging, watchlist management, recent trades, and manual digest
   triggering.
@@ -51,15 +51,19 @@ Dashboard watchlist flow:
 4. Quote failures are returned as unavailable row values without removing the
    ticker.
 
-Scheduled digest flow:
+Scheduled briefing flow:
 
 1. `main.py` loads holdings through `config.load_portfolio()`.
 2. `modules.price_fetcher.get_all_prices()` fetches live prices.
 3. `modules.portfolio.calculate_portfolio()` builds the portfolio state.
 4. `modules.history.save_snapshot()` writes one snapshot per day to SQLite.
-5. `modules.news_sentiment` collects ticker and macro sentiment.
-6. `modules.decision_engine` builds AI analysis and sell recommendations.
-7. `modules.alerts.send_daily_email()` sends the HTML digest.
+5. `main.py` scopes the briefing: daily uses held Growth stocks plus
+   `modules.database.get_watchlist_tickers()`, while weekly uses all held stock
+   positions.
+6. `modules.news_sentiment` collects ticker and macro sentiment for that scope.
+7. `modules.decision_engine` builds AI analysis and sell recommendations.
+   Watchlist tickers appear in analysis only, not sell recommendations.
+8. `modules.alerts.send_daily_email()` sends the HTML briefing.
 
 Price-check flow:
 
@@ -70,7 +74,7 @@ Price-check flow:
 ## Entry Points
 
 - `python main.py`: long-running scheduler.
-- `python main.py --once`: run one digest and exit.
+- `python main.py --once`: run one daily Growth plus watchlist briefing and exit.
 - `python ui/app.py`: local Flask dashboard on port 5001.
 - `docker compose up`: build/run the container locally.
 - `Dockerfile`/`entrypoint.sh`: production container startup.

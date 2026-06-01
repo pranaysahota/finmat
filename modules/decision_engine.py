@@ -346,7 +346,7 @@ def get_weekly_analysis(
 
     Builds a structured prompt from portfolio_state, performance, per-ticker sentiment,
     and macro themes, then asks Gemini 3 Flash (with Google Search) to produce a
-    4-5 sentence review per holding covering: news this week, analyst consensus,
+    4-5 sentence review per stock covering: news this week, analyst consensus,
     thesis validity, and one-sentence forward outlook.
 
     Args:
@@ -370,13 +370,13 @@ def get_weekly_analysis(
     lines: list[str] = [
         "WEEKLY PORTFOLIO REVIEW REQUEST",
         "",
-        "For each holding below, produce a section with 4-5 sentences covering:",
+        "For each stock below, produce a section with 4-5 sentences covering:",
         "  1. What happened this week (grounded in recent news — use Google Search)",
         "  2. Current analyst consensus and any price target changes this week",
         "  3. Whether the investment thesis still holds",
         "  4. One sentence forward outlook for the coming week",
         "",
-        "HOLDINGS:",
+        "STOCKS:",
     ]
 
     for ticker, holding in portfolio_state.get("holdings", {}).items():
