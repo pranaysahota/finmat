@@ -23,7 +23,7 @@ from modules.alerts import (
 )
 from modules.database import get_watchlist_tickers
 from modules.decision_engine import (
-    get_weekly_analysis,
+    get_stock_analysis,
     get_weekly_sell_recommendations,
 )
 from modules.history import (
@@ -180,14 +180,18 @@ def _run_briefing(
     portfolio: dict,
     held_tickers: list[str],
     watchlist_tickers: list[str],
+    briefing_mode: str,
+    news_window_label: str,
+    news_window_hours: int,
+    include_performance_summary: bool,
 ) -> None:
     """Shared briefing pipeline: prices → sentiment → Gemini analysis → sell recs → send.
 
     Pipeline:
-        get_performance_summary
-        → get_all_prices + calculate_portfolio + check_rules
+        get_all_prices + calculate_portfolio + check_rules
+        → get_performance_summary when requested
         → get_all_sentiment + get_macro_sentiment
-        → get_weekly_analysis      (Gemini + Google Search)
+        → get_stock_analysis      (Gemini + Google Search)
         → get_weekly_sell_recommendations  (Gemini, no Search)
         → assemble HTML digest body
         → send_daily_email
@@ -198,13 +202,6 @@ def _run_briefing(
     ts  = datetime.now().strftime("%Y-%m-%d %H:%M")
     now = datetime.now()
     print(f"[{ts}] ── {label} started ──")
-
-    # ── 1. Performance summary ──
-    try:
-        performance = get_performance_summary()
-    except Exception as exc:
-        print(f"[{ts}] Performance summary FAILED: {exc}")
-        performance = {}
 
     # ── 2. Prices + portfolio state + rules ──
     portfolio_mod.PORTFOLIO = portfolio
@@ -238,19 +235,28 @@ def _run_briefing(
         analysis_state = {}
         triggered_rules = []
 
+    performance = {}
+    if include_performance_summary:
+        try:
+            performance = get_performance_summary()
+        except Exception as exc:
+            print(f"[{ts}] Performance summary FAILED: {exc}")
+            performance = {}
+
     # ── 3. Sentiment (stocks only) + macro sentiment ──
     sentiment      = {}
     macro_sentiment = {}
     scope_tickers = _unique_tickers(held_tickers + watchlist_tickers)
     print(f"[{ts}] 📊 Fetching sentiment for {label.lower()}...")
     try:
-        sentiment = get_all_sentiment(scope_tickers)
+        sentiment = get_all_sentiment(scope_tickers, max_age_hours=news_window_hours)
     except Exception as exc:
         print(f"[{ts}] Sentiment FAILED: {exc}")
 
     try:
         macro_sentiment = _filter_macro_sentiment(
-            get_macro_sentiment(analysis_state), set(scope_tickers)
+            get_macro_sentiment(analysis_state, max_age_hours=news_window_hours),
+            set(scope_tickers),
         )
     except Exception as exc:
         print(f"[{ts}] Macro sentiment FAILED: {exc}")
@@ -259,8 +265,13 @@ def _run_briefing(
     gemini_analysis = ""
     print(f"[{ts}] 🤖 Running Gemini per-stock analysis...")
     try:
-        gemini_analysis = get_weekly_analysis(
-            analysis_state, performance, sentiment, macro_sentiment
+        gemini_analysis = get_stock_analysis(
+            analysis_state,
+            performance,
+            sentiment,
+            macro_sentiment,
+            briefing_mode=briefing_mode,
+            news_window_label=news_window_label,
         )
     except Exception as exc:
         print(f"[{ts}] Gemini analysis FAILED: {exc}")
@@ -281,36 +292,40 @@ def _run_briefing(
     date_range  = now.strftime("%d %b %Y")
     total_value = portfolio_state.get("total_value", 0.0)
 
-    seven_day_pct = performance.get("last_7_days_pct")
-    inception_pct = performance.get("since_inception_pct", 0.0)
-    inception_usd = performance.get("since_inception_usd", 0.0)
-    best          = performance.get("best_performer")
-    worst         = performance.get("worst_performer")
-
     cgt_footer = (
         "🇮🇪 Irish CGT reminder: pay by 15 Dec for Jan–Nov disposals, "
         "31 Jan for December disposals. €1,270 annual exemption resets 1 Jan."
     )
 
-    # HTML email body
-    perf_rows = f"<tr><td><b>Portfolio value</b></td><td>${total_value:,.2f}</td></tr>\n"
-    if seven_day_pct is not None:
-        perf_rows += f"    <tr><td><b>This week</b></td><td>{seven_day_pct:+.2f}%</td></tr>\n"
-    if best:
-        perf_rows += f"    <tr><td><b>Best performer</b></td><td>{html.escape(str(best['ticker']))} ({best['pnl_pct']:+.2f}%)</td></tr>\n"
-    if worst:
-        perf_rows += f"    <tr><td><b>Worst performer</b></td><td>{html.escape(str(worst['ticker']))} ({worst['pnl_pct']:+.2f}%)</td></tr>\n"
-    perf_rows += f"    <tr><td><b>Since inception</b></td><td>{inception_pct:+.2f}% (${inception_usd:+,.2f})</td></tr>"
+    summary_table = ""
+    if include_performance_summary:
+        seven_day_pct = performance.get("last_7_days_pct")
+        inception_pct = performance.get("since_inception_pct", 0.0)
+        inception_usd = performance.get("since_inception_usd", 0.0)
+        best          = performance.get("best_performer")
+        worst         = performance.get("worst_performer")
+
+        perf_rows = f"<tr><td><b>Portfolio value</b></td><td>${total_value:,.2f}</td></tr>\n"
+        if seven_day_pct is not None:
+            perf_rows += f"    <tr><td><b>This week</b></td><td>{seven_day_pct:+.2f}%</td></tr>\n"
+        if best:
+            perf_rows += f"    <tr><td><b>Best performer</b></td><td>{html.escape(str(best['ticker']))} ({best['pnl_pct']:+.2f}%)</td></tr>\n"
+        if worst:
+            perf_rows += f"    <tr><td><b>Worst performer</b></td><td>{html.escape(str(worst['ticker']))} ({worst['pnl_pct']:+.2f}%)</td></tr>\n"
+        perf_rows += f"    <tr><td><b>Since inception</b></td><td>{inception_pct:+.2f}% (${inception_usd:+,.2f})</td></tr>"
+
+        summary_table = f"""
+  <table style="border-collapse: collapse; margin-bottom: 24px;">
+    {perf_rows}
+  </table>
+"""
 
     email_body = f"""<!DOCTYPE html>
 <html>
 <body style="font-family: monospace; font-size: 14px; color: #222; max-width: 800px; margin: 0 auto;">
   <h2>📊 {html.escape(label)} — {html.escape(date_range)}</h2>
   <p style="color: #555;">Briefing scope: {html.escape(', '.join(scope_tickers) or 'No stock tickers in scope')}</p>
-
-  <table style="border-collapse: collapse; margin-bottom: 24px;">
-    {perf_rows}
-  </table>
+{summary_table}
 
   <h3>📈 Per-Stock Analysis</h3>
   <div style="background: #f5f5f5; padding: 12px; border-radius: 4px;">{md.markdown(gemini_analysis)}</div>
@@ -346,6 +361,10 @@ def run_daily_digest() -> None:
         portfolio=portfolio,
         held_tickers=growth_tickers,
         watchlist_tickers=watchlist_tickers,
+        briefing_mode="daily",
+        news_window_label="last 24 hours",
+        news_window_hours=24,
+        include_performance_summary=False,
     )
 
 
@@ -357,6 +376,10 @@ def run_weekly_digest() -> None:
         portfolio=portfolio,
         held_tickers=_stock_tickers(portfolio),
         watchlist_tickers=[],
+        briefing_mode="weekly",
+        news_window_label="last week",
+        news_window_hours=168,
+        include_performance_summary=True,
     )
 
 

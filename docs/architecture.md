@@ -60,10 +60,13 @@ Scheduled briefing flow:
 5. `main.py` scopes the briefing: daily uses held Growth stocks plus
    `modules.database.get_watchlist_tickers()`, while weekly uses all held stock
    positions.
-6. `modules.news_sentiment` collects ticker and macro sentiment for that scope.
-7. `modules.decision_engine` builds AI analysis and sell recommendations.
-   Watchlist tickers appear in analysis only, not sell recommendations.
-8. `modules.alerts.send_daily_email()` sends the HTML briefing.
+6. `modules.news_sentiment` collects ticker and macro sentiment for that scope:
+   daily uses a 24-hour freshness window and weekly uses a 168-hour window.
+7. `modules.decision_engine` builds structured AI analysis and sell
+   recommendations. Watchlist tickers appear in analysis only, with current
+   price, analyst target price, and entry-watch guidance.
+8. `modules.alerts.send_daily_email()` sends the HTML briefing. Daily emails
+   omit the portfolio summary table; weekly emails include it.
 
 Price-check flow:
 
