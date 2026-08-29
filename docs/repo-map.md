@@ -28,8 +28,8 @@ Folder-by-folder guide for future work.
 
 ## modules/
 
-- `database.py`: SQLite schema and CRUD for holdings, trades, snapshots,
-  watchlist tickers, and realized profit/loss/P&L aggregation. Modify for
+- `database.py`: SQLite schema and CRUD for holdings, trades, USD cash,
+  snapshots, watchlist tickers, and realized profit/loss/P&L aggregation. Modify for
   persistence changes.
 - `portfolio.py`: pure calculations and alert-rule checks. Modify carefully;
   this is financial logic.
@@ -44,10 +44,11 @@ Folder-by-folder guide for future work.
 
 ## ui/
 
-- `app.py`: Flask app, REST routes, Basic Auth, trade API, watchlist API, and
-  dashboard portfolio response shaping.
-- `static/index.html`: current single-file frontend. Safe for UI-only changes,
-  but route/API changes must be coordinated with `ui/app.py`.
+- `app.py`: Flask app, REST routes, Basic Auth, trade API, cash wallet API,
+  watchlist API, and dashboard portfolio response shaping.
+- `static/index.html`: current single-file frontend for portfolio, trades, cash,
+  watchlist, and charts. Safe for UI-only changes, but route/API changes must be
+  coordinated with `ui/app.py`.
 
 ## portfolio/
 

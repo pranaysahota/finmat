@@ -1,6 +1,6 @@
 # finmat
 
-A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets, runs automated price checks and daily HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules. Includes a web dashboard for live portfolio monitoring and trade logging, backed by SQLite.
+A Python financial monitoring agent for an $8,000 personal investment portfolio. <br/>Tracks 9 assets across 2 active buckets plus USD wallet cash, runs automated price checks and daily HTML email digests, and provides AI-powered analysis using the Anthropic API and Google Gemini — all tailored to Irish CGT rules. Includes a web dashboard for live portfolio monitoring, trade logging, and manual cash ledger updates, backed by SQLite.
 
 ---
 
@@ -116,14 +116,15 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 
 ### Performance History
 - **Append-only** daily snapshots in the SQLite `snapshots` table
-- Holdings and trade history persisted in **SQLite** (`data/finmat.db`)
+- Holdings, trade history, and USD cash ledger persisted in **SQLite** (`data/finmat.db`)
 - Tracks since-inception return, 7-day change, best/worst performers across all snapshots
 - Prevents duplicate snapshots if the agent restarts mid-day
 - Performance summary is included in the daily digest
 
 ### Web Dashboard
-- **Live portfolio view** — summary cards, per-holding table with sortable columns (Stock, Value, P&L), bucket allocation and holdings breakdown charts
+- **Live portfolio view** — summary cards, per-holding table with sortable columns (Stock, Value, P&L), USD cash balance, bucket allocation and holdings breakdown charts
 - **Trade logging** — buy and sell trades submitted via the browser, with live total calculation and validation
+- **Cash wallet logging** — manual USD deposits, withdrawals, and signed adjustments with recent activity
 - **Recent transactions** — last 5 trades displayed in a scrollable table
 - **Basic Auth** — protected by `DASHBOARD_USER` / `DASHBOARD_PASSWORD` environment variables
 - Served by Flask (`ui/app.py`) and exposed via Fly.io HTTP service
@@ -131,7 +132,8 @@ A Python financial monitoring agent for an $8,000 personal investment portfolio.
 ### Trade Logging
 - Trades are logged via the **web dashboard** — buy or sell, with ticker, quantity, and price
 - Calculates new **weighted average buy price**: `(old_qty × old_avg + new_qty × price) / (old_qty + new_qty)`
-- All holdings and trades are persisted in **SQLite** (`data/finmat.db`) via `modules/database.py`
+- All holdings, trades, and cash ledger entries are persisted in **SQLite** (`data/finmat.db`) via `modules/database.py`
+- Stock and crypto trades do not automatically mutate USD cash; log wallet movements separately in the dashboard.
 - `trade.py` is a disabled legacy CLI; use the dashboard or `POST /api/trade`
 
 ### Irish Tax Optimisation
@@ -178,11 +180,11 @@ finmat/
 │   ├── news_sentiment.py        # Headlines → Claude Haiku (per-ticker + macro themes)
 │   ├── decision_engine.py       # Claude/Gemini analysis and recommendations
 │   ├── alerts.py                # Telegram message formatting + sending
-│   ├── database.py              # SQLite persistence — holdings + trades
+│   ├── database.py              # SQLite persistence — holdings + trades + USD cash
 │   └── run_logger.py            # JSONL run logger candidate (not currently wired)
 ├── ui/
 │   ├── app.py                   # Flask REST API + Basic Auth
-│   └── static/index.html        # Single-page dashboard (portfolio, charts, trade form)
+│   └── static/index.html        # Single-page dashboard (portfolio, charts, trade/cash forms)
 ├── scripts/
 │   ├── read_logs.sh             # Shell script for tailing/filtering JSONL logs
 │   └── review_logs.py           # AI-powered log review via Claude
@@ -191,7 +193,7 @@ finmat/
 │   ├── todo.md                  # Active task plan
 │   └── lessons.md               # Accumulated project lessons
 └── data/
-    └── finmat.db                # SQLite database — holdings, trades, snapshots (gitignored)
+    └── finmat.db                # SQLite database — holdings, trades, cash, snapshots (gitignored)
 ```
 
 ---
