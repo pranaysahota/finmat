@@ -18,6 +18,36 @@ def client(monkeypatch):
     return app_mod.app.test_client()
 
 
+def test_portfolio_summary_returns_only_compact_state(client, monkeypatch):
+    state = {
+        "total_value": 12345.67,
+        "total_cost": 10000.00,
+        "total_pnl_usd": 2345.67,
+        "total_pnl_pct": 23.46,
+        "bucket_weights": {"Diversified": 60.5, "Growth": 39.5},
+        "bucket_targets": {"Diversified": 60, "Growth": 25, "Crypto": 15},
+        "holdings": {"MSFT": {"current_value": 12345.67}},
+    }
+    monkeypatch.setattr(app_mod, "load_portfolio", lambda: {"Diversified": {}})
+    monkeypatch.setattr(app_mod, "get_all_prices", lambda portfolio: {})
+    monkeypatch.setattr(app_mod, "calculate_portfolio", lambda prices, portfolio: state)
+
+    response = client.get("/api/portfolio/summary")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "total_value": 12345.67,
+        "total_cost": 10000.00,
+        "total_pnl_usd": 2345.67,
+        "total_pnl_pct": 23.46,
+        "bucket_weights": {
+            "Diversified": 60.5,
+            "Growth": 39.5,
+            "Crypto": 0.0,
+        },
+    }
+
+
 def test_portfolio_response_includes_qty_and_realized_pnl(client, monkeypatch):
     portfolio = {
         "Diversified": {
