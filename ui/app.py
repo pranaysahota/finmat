@@ -78,9 +78,7 @@ def dashboard():
 def api_portfolio():
     """Return full portfolio state with live prices."""
     try:
-        portfolio = load_portfolio()
-        prices = get_all_prices(portfolio)
-        state = calculate_portfolio(prices, portfolio)
+        portfolio, state = _load_portfolio_state()
 
         # Flatten holdings into a sorted list, skip zero-qty positions
         holdings_list = []
@@ -110,6 +108,16 @@ def api_portfolio():
             "bucket_targets": BUCKET_TARGETS,
             "holdings": holdings_list,
         })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/portfolio/summary")
+def api_portfolio_summary():
+    """Return portfolio totals and bucket weights with live prices."""
+    try:
+        _, state = _load_portfolio_state()
+        return jsonify(_portfolio_summary(state))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -320,6 +328,27 @@ def api_digest():
 
 
 # ── Helpers ──────────────────────────────────────────────────────
+
+def _load_portfolio_state() -> tuple[dict, dict]:
+    """Load the portfolio and calculate its state using live prices."""
+    portfolio = load_portfolio()
+    prices = get_all_prices(portfolio)
+    return portfolio, calculate_portfolio(prices, portfolio)
+
+
+def _portfolio_summary(state: dict) -> dict:
+    """Select the compact, API-facing subset of a portfolio state."""
+    return {
+        "total_value": state["total_value"],
+        "total_cost": state["total_cost"],
+        "total_pnl_usd": state["total_pnl_usd"],
+        "total_pnl_pct": state["total_pnl_pct"],
+        "bucket_weights": {
+            bucket: state["bucket_weights"].get(bucket, 0.0)
+            for bucket in BUCKET_TARGETS
+        },
+    }
+
 
 def _get_avg_buy(portfolio: dict, ticker: str) -> float:
     """Look up avg_buy for a ticker from the portfolio dict."""
