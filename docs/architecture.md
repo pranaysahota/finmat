@@ -2,17 +2,17 @@
 
 This document describes the current codebase baseline. Older docs may mention
 JSON or `portfolio/local.py` as canonical storage; the current app uses SQLite
-for holdings, trades, and snapshots.
+for holdings, trades, USD cash, and snapshots.
 
 ## Main Components
 
 - `main.py`: scheduler entry point. Runs market-hours price checks, the daily
   Growth plus watchlist briefing, and the Sunday all-stock briefing.
 - `ui/app.py`: Flask REST API and dashboard server. Provides portfolio views,
-  trade logging, watchlist management, recent trades, and manual digest
+  trade logging, USD cash wallet logging, watchlist management, recent trades, and manual digest
   triggering.
 - `modules/database.py`: SQLite persistence layer for holdings, trades,
-  watchlist tickers, migrations, and snapshots.
+  USD cash ledger entries, watchlist tickers, migrations, and snapshots.
 - `modules/price_fetcher.py`: market price retrieval from Yahoo Finance and,
   when crypto is enabled, CoinGecko-style crypto endpoints. The dashboard
   watchlist also uses Yahoo chart metadata for current price and previous close.
@@ -40,6 +40,18 @@ Dashboard trade flow:
 2. `ui/app.py` validates the request.
 3. `modules.database.upsert_holding()` and `insert_trade()` update SQLite.
 4. Future calls to `config.load_portfolio()` read holdings from SQLite.
+5. Trades do not mutate USD cash automatically; cash changes are logged through
+   the cash wallet flow.
+
+Dashboard cash wallet flow:
+
+1. User submits a deposit, withdrawal, or signed adjustment in
+   `ui/static/index.html`.
+2. `ui/app.py` validates the request.
+3. `modules.database.insert_cash_transaction()` appends a ledger row with a
+   signed amount and running balance.
+4. Portfolio API responses include cash in `total_value` while keeping
+   investment P&L and bucket weights investment-only.
 
 Dashboard watchlist flow:
 
@@ -91,6 +103,12 @@ Price-check flow:
   `/data/finmat.db` on Fly.io.
 - Tables are created in `modules/database.init_db()` at import/startup time, so
   a fresh empty SQLite database is a valid day-0 state.
+- USD wallet cash is tracked manually in a cash transaction ledger. Its default
+  balance is zero until a deposit or adjustment is logged.
+- Portfolio `total_value` includes USD cash; `invested_value`, bucket values,
+  bucket weights, and open-position P&L remain based on stock/crypto holdings.
+- Daily snapshots store the cash-inclusive `total_value`; detailed cash
+  movements remain in the cash ledger.
 - The dashboard stores watchlist stock tickers in SQLite. Watchlist rows are
   independent from portfolio holdings and trades.
 - Realized profit, loss, and net P&L are derived from `gross_pnl` on sell

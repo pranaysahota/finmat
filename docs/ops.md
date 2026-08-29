@@ -75,7 +75,8 @@ container startup with `RUN_SQLITE_MIGRATION=1`.
 
 Current:
 
-- `/data/finmat.db`: SQLite holdings, trades, snapshots, migration records.
+- `/data/finmat.db`: SQLite holdings, trades, USD cash ledger, snapshots,
+  migration records.
 - `/data/logs/`: JSONL logs if/when `modules/run_logger.py` is wired in.
 
 Legacy/migration context:

@@ -37,6 +37,8 @@ MOCK_PORTFOLIO = {
 
 MOCK_STATE = {
     "total_value":    8200.0,
+    "invested_value": 7700.0,
+    "cash_balance":   500.0,
     "total_cost":     8000.0,
     "total_pnl_usd":  200.0,
     "total_pnl_pct":  2.5,
@@ -97,6 +99,7 @@ def _patch_pipeline(**overrides):
         "load_portfolio":                  MagicMock(return_value=MOCK_PORTFOLIO),
         "save_snapshot":                   MagicMock(),
         "get_watchlist_tickers":           MagicMock(return_value=[]),
+        "get_cash_balance":                MagicMock(return_value=500.0),
         "get_stock_price":                 MagicMock(return_value=250.0),
     }
     # Accept "main.foo" keys for convenience and strip the prefix
@@ -121,7 +124,9 @@ class TestRunPriceCheck:
         mocks = _patch_pipeline()
         with patch.multiple("main", **mocks):
             main.run_price_check()
-        mocks["calculate_portfolio"].assert_called_once_with(MOCK_PRICES)
+        mocks["calculate_portfolio"].assert_called_once_with(
+            MOCK_PRICES, cash_balance=500.0
+        )
 
     def test_calls_check_rules(self):
         mocks = _patch_pipeline()
@@ -208,7 +213,9 @@ class TestRunDailyDigest:
         real_calculate = main.calculate_portfolio
         mocks = _patch_pipeline(**{
             "main.calculate_portfolio": MagicMock(
-                side_effect=lambda prices, portfolio=None: real_calculate(prices, portfolio)
+                side_effect=lambda prices, portfolio=None, cash_balance=0.0: real_calculate(
+                    prices, portfolio, cash_balance=cash_balance
+                )
             ),
             "main.get_watchlist_tickers": MagicMock(return_value=["TSLA", "NVDA"]),
         })
@@ -223,7 +230,9 @@ class TestRunDailyDigest:
         real_calculate = main.calculate_portfolio
         mocks = _patch_pipeline(**{
             "main.calculate_portfolio": MagicMock(
-                side_effect=lambda prices, portfolio=None: real_calculate(prices, portfolio)
+                side_effect=lambda prices, portfolio=None, cash_balance=0.0: real_calculate(
+                    prices, portfolio, cash_balance=cash_balance
+                )
             ),
             "main.get_watchlist_tickers": MagicMock(return_value=["TSLA"]),
         })

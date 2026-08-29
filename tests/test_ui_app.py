@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -21,6 +22,8 @@ def client(monkeypatch):
 def test_portfolio_summary_returns_only_compact_state(client, monkeypatch):
     state = {
         "total_value": 12345.67,
+        "invested_value": 12000.00,
+        "cash_balance": 345.67,
         "total_cost": 10000.00,
         "total_pnl_usd": 2345.67,
         "total_pnl_pct": 23.46,
@@ -30,13 +33,19 @@ def test_portfolio_summary_returns_only_compact_state(client, monkeypatch):
     }
     monkeypatch.setattr(app_mod, "load_portfolio", lambda: {"Diversified": {}})
     monkeypatch.setattr(app_mod, "get_all_prices", lambda portfolio: {})
-    monkeypatch.setattr(app_mod, "calculate_portfolio", lambda prices, portfolio: state)
+    monkeypatch.setattr(
+        app_mod, "calculate_portfolio",
+        lambda prices, portfolio, cash_balance=0.0: state,
+    )
+    monkeypatch.setattr(app_mod, "get_cash_balance", lambda: 345.67)
 
     response = client.get("/api/portfolio/summary")
 
     assert response.status_code == 200
     assert response.get_json() == {
         "total_value": 12345.67,
+        "invested_value": 12000.00,
+        "cash_balance": 345.67,
         "total_cost": 10000.00,
         "total_pnl_usd": 2345.67,
         "total_pnl_pct": 23.46,
@@ -61,7 +70,9 @@ def test_portfolio_response_includes_qty_and_realized_pnl(client, monkeypatch):
         }
     }
     state = {
-        "total_value": 300.0,
+        "total_value": 350.0,
+        "invested_value": 300.0,
+        "cash_balance": 50.0,
         "total_cost": 250.0,
         "total_pnl_usd": 50.0,
         "total_pnl_pct": 20.0,
@@ -80,7 +91,11 @@ def test_portfolio_response_includes_qty_and_realized_pnl(client, monkeypatch):
 
     monkeypatch.setattr(app_mod, "load_portfolio", lambda: portfolio)
     monkeypatch.setattr(app_mod, "get_all_prices", lambda p: {"MSFT": 120.0})
-    monkeypatch.setattr(app_mod, "calculate_portfolio", lambda prices, p: state)
+    monkeypatch.setattr(
+        app_mod, "calculate_portfolio",
+        lambda prices, p, cash_balance=0.0: state,
+    )
+    monkeypatch.setattr(app_mod, "get_cash_balance", lambda: 50.0)
     monkeypatch.setattr(
         app_mod,
         "get_realized_pnl_breakdown",
@@ -94,8 +109,88 @@ def test_portfolio_response_includes_qty_and_realized_pnl(client, monkeypatch):
     assert data["realized_profit_usd"] == 20.00
     assert data["realized_loss_usd"] == 7.66
     assert data["realized_pnl_usd"] == 12.34
+    assert data["invested_value"] == 300.0
+    assert data["cash_balance"] == 50.0
+    assert data["total_value"] == 350.0
     assert data["holdings"][0]["qty"] == 2.5
     assert data["holdings"][0]["cost_basis"] == 250.0
+
+
+def test_cash_response_includes_balance_and_recent_transactions(client, monkeypatch):
+    rows = [{
+        "id": "cash-1",
+        "timestamp": "2026-08-29T10:00:00",
+        "transaction_type": "deposit",
+        "amount": 125.0,
+        "balance_after": 125.0,
+        "note": "opening balance",
+    }]
+    monkeypatch.setattr(app_mod, "get_cash_balance", lambda: 125.0)
+    monkeypatch.setattr(app_mod, "get_recent_cash_transactions", lambda limit: rows)
+
+    res = client.get("/api/cash")
+
+    assert res.status_code == 200
+    assert res.get_json() == {"balance": 125.0, "transactions": rows}
+
+
+def test_cash_post_logs_transaction(client, monkeypatch):
+    stored = {
+        "id": "cash-1",
+        "timestamp": "2026-08-29T10:00:00",
+        "transaction_type": "deposit",
+        "amount": 125.0,
+        "balance_after": 125.0,
+        "note": "opening balance",
+    }
+    mock_insert = MagicMock(return_value=stored)
+    monkeypatch.setattr(app_mod, "insert_cash_transaction", mock_insert)
+    monkeypatch.setattr(app_mod.uuid, "uuid4", lambda: "cash-1")
+
+    res = client.post("/api/cash", json={
+        "transaction_type": "deposit",
+        "amount": 125.0,
+        "note": "opening balance",
+    })
+
+    assert res.status_code == 200
+    assert res.get_json() == {"success": True, "transaction": stored, "balance": 125.0}
+    assert mock_insert.call_args.args[0]["transaction_type"] == "deposit"
+    assert mock_insert.call_args.args[0]["amount"] == 125.0
+
+
+def test_cash_post_rejects_zero_amount(client):
+    res = client.post("/api/cash", json={
+        "transaction_type": "deposit",
+        "amount": 0,
+    })
+
+    assert res.status_code == 400
+    assert res.get_json()["error"] == "amount must be a non-zero number"
+
+
+def test_trade_does_not_mutate_cash(client, monkeypatch):
+    monkeypatch.setattr(app_mod, "get_holding", lambda ticker: {
+        "ticker": "MSFT",
+        "bucket": "Diversified",
+        "asset_type": "stock",
+        "qty": 1.0,
+        "avg_buy": 100.0,
+    })
+    monkeypatch.setattr(app_mod, "upsert_holding", MagicMock())
+    monkeypatch.setattr(app_mod, "insert_trade", MagicMock())
+    cash_insert = MagicMock()
+    monkeypatch.setattr(app_mod, "insert_cash_transaction", cash_insert)
+
+    res = client.post("/api/trade", json={
+        "side": "buy",
+        "ticker": "MSFT",
+        "qty": 1.0,
+        "price": 120.0,
+    })
+
+    assert res.status_code == 200
+    assert cash_insert.call_count == 0
 
 
 def test_watchlist_response_includes_quote_and_failed_rows(client, monkeypatch):

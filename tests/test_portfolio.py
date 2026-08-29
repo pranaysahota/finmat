@@ -141,6 +141,19 @@ class TestCalculatePortfolio:
         state = calculate_portfolio(MOCK_PRICES)
         expected = round(sum(h["current_value"] for h in state["holdings"].values()), 2)
         assert state["total_value"] == expected
+        assert state["invested_value"] == expected
+
+    def test_cash_balance_increases_total_value_without_changing_pnl_or_weights(self):
+        state = calculate_portfolio(MOCK_PRICES, cash_balance=320.0)
+
+        assert state["invested_value"] == 1680.00
+        assert state["cash_balance"] == 320.00
+        assert state["total_value"] == 2000.00
+        assert state["total_cost"] == 1400.00
+        assert state["total_pnl_usd"] == 280.00
+        assert state["total_pnl_pct"] == 20.0
+        assert state["bucket_values"]["Diversified"] == 440.00
+        assert state["bucket_weights"]["Diversified"] == round(440 / 1680 * 100, 2)
 
     def test_total_cost_is_sum_of_cost_bases(self):
         state = calculate_portfolio(MOCK_PRICES)
