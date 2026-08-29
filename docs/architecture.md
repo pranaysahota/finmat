@@ -6,14 +6,16 @@ for holdings, trades, and snapshots.
 
 ## Main Components
 
-- `main.py`: scheduler entry point. Runs market-hours price checks and the daily
-  digest pipeline.
+- `main.py`: scheduler entry point. Runs market-hours price checks, the daily
+  Growth plus watchlist briefing, and the Sunday all-stock briefing.
 - `ui/app.py`: Flask REST API and dashboard server. Provides portfolio views,
-  trade logging, recent trades, and manual digest triggering.
+  trade logging, watchlist management, recent trades, and manual digest
+  triggering.
 - `modules/database.py`: SQLite persistence layer for holdings, trades,
-  migrations, and snapshots.
+  watchlist tickers, migrations, and snapshots.
 - `modules/price_fetcher.py`: market price retrieval from Yahoo Finance and,
-  when crypto is enabled, CoinGecko-style crypto endpoints.
+  when crypto is enabled, CoinGecko-style crypto endpoints. The dashboard
+  watchlist also uses Yahoo chart metadata for current price and previous close.
 - `modules/portfolio.py`: pure portfolio calculations and risk rule checks.
 - `modules/history.py`: snapshot persistence and performance summaries backed by
   SQLite.
@@ -39,15 +41,32 @@ Dashboard trade flow:
 3. `modules.database.upsert_holding()` and `insert_trade()` update SQLite.
 4. Future calls to `config.load_portfolio()` read holdings from SQLite.
 
-Scheduled digest flow:
+Dashboard watchlist flow:
+
+1. User adds or removes a ticker in `ui/static/index.html`.
+2. `ui/app.py` validates and normalizes stock tickers through
+   `modules.database` watchlist helpers.
+3. `GET /api/watchlist` reads the persisted ticker list and fetches current
+   price plus previous close from Yahoo Finance.
+4. Quote failures are returned as unavailable row values without removing the
+   ticker.
+
+Scheduled briefing flow:
 
 1. `main.py` loads holdings through `config.load_portfolio()`.
 2. `modules.price_fetcher.get_all_prices()` fetches live prices.
 3. `modules.portfolio.calculate_portfolio()` builds the portfolio state.
 4. `modules.history.save_snapshot()` writes one snapshot per day to SQLite.
-5. `modules.news_sentiment` collects ticker and macro sentiment.
-6. `modules.decision_engine` builds AI analysis and sell recommendations.
-7. `modules.alerts.send_daily_email()` sends the HTML digest.
+5. `main.py` scopes the briefing: daily uses held Growth stocks plus
+   `modules.database.get_watchlist_tickers()`, while weekly uses all held stock
+   positions.
+6. `modules.news_sentiment` collects ticker and macro sentiment for that scope:
+   daily uses a 24-hour freshness window and weekly uses a 168-hour window.
+7. `modules.decision_engine` builds structured AI analysis and sell
+   recommendations. Watchlist tickers appear in analysis only, with current
+   price, analyst target price, and entry-watch guidance.
+8. `modules.alerts.send_daily_email()` sends the HTML briefing. Daily emails
+   omit the portfolio summary table; weekly emails include it.
 
 Price-check flow:
 
@@ -58,7 +77,7 @@ Price-check flow:
 ## Entry Points
 
 - `python main.py`: long-running scheduler.
-- `python main.py --once`: run one digest and exit.
+- `python main.py --once`: run one daily Growth plus watchlist briefing and exit.
 - `python ui/app.py`: local Flask dashboard on port 5001.
 - `docker compose up`: build/run the container locally.
 - `Dockerfile`/`entrypoint.sh`: production container startup.
@@ -72,6 +91,11 @@ Price-check flow:
   `/data/finmat.db` on Fly.io.
 - Tables are created in `modules/database.init_db()` at import/startup time, so
   a fresh empty SQLite database is a valid day-0 state.
+- The dashboard stores watchlist stock tickers in SQLite. Watchlist rows are
+  independent from portfolio holdings and trades.
+- Realized profit, loss, and net P&L are derived from `gross_pnl` on sell
+  trades only. Open-position P&L remains the portfolio calculation output from
+  current value minus cost basis.
 - SQLite WAL mode and foreign keys are enabled per connection.
 - Runtime files under `data/` are gitignored and should not be committed.
 - `portfolio/local.py` and `data/trades.json` are legacy migration artifacts.

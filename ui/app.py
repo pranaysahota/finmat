@@ -20,9 +20,18 @@ sys.path.insert(0, str(ROOT))
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory
 
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, load_portfolio
-from modules.database import get_all_holdings, get_holding, get_recent_trades, insert_trade, upsert_holding
+from modules.database import (
+    add_watchlist_ticker,
+    get_holding,
+    get_realized_pnl_breakdown,
+    get_recent_trades,
+    get_watchlist_tickers,
+    insert_trade,
+    remove_watchlist_ticker,
+    upsert_holding,
+)
 from modules.portfolio import calculate_portfolio
-from modules.price_fetcher import get_all_prices
+from modules.price_fetcher import get_all_prices, get_stock_quote
 from trade import _calc_cgt, _normalise_ticker
 
 VALID_BUCKETS = {"Diversified", "Growth", "Crypto"}
@@ -88,6 +97,7 @@ def api_portfolio():
             holdings_list.append({
                 "ticker": ticker,
                 "bucket": data["bucket"],
+                "qty": _get_asset_field(portfolio, ticker, "qty", 0.0),
                 "avg_buy": _get_avg_buy(portfolio, ticker),
                 "current_price": data["current_price"],
                 "current_value": data["current_value"],
@@ -98,12 +108,16 @@ def api_portfolio():
 
         bucket_order = {"Diversified": 0, "Growth": 1, "Crypto": 2}
         holdings_list.sort(key=lambda h: (bucket_order.get(h["bucket"], 9), h["ticker"]))
+        realized = get_realized_pnl_breakdown()
 
         return jsonify({
             "total_value": state["total_value"],
             "total_cost": state["total_cost"],
             "total_pnl_usd": state["total_pnl_usd"],
             "total_pnl_pct": state["total_pnl_pct"],
+            "realized_profit_usd": realized["profit"],
+            "realized_loss_usd": realized["loss"],
+            "realized_pnl_usd": realized["pnl"],
             "bucket_weights": state["bucket_weights"],
             "bucket_targets": BUCKET_TARGETS,
             "holdings": holdings_list,
@@ -150,6 +164,64 @@ def api_recent_trades():
     try:
         trades = get_recent_trades(5)
         return jsonify(trades)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlist")
+def api_watchlist():
+    """Return watchlist stocks with current price and 1D movement."""
+    try:
+        rows = []
+        for ticker in get_watchlist_tickers():
+            quote = get_stock_quote(ticker)
+            row = {
+                "ticker": ticker,
+                "current_price": None,
+                "previous_close": None,
+                "change_pct": None,
+            }
+            if quote:
+                current_price = quote["current_price"]
+                previous_close = quote["previous_close"]
+                row.update({
+                    "current_price": current_price,
+                    "previous_close": previous_close,
+                    "change_pct": round(
+                        ((current_price - previous_close) / previous_close) * 100,
+                        2,
+                    ) if previous_close else None,
+                })
+            rows.append(row)
+        return jsonify(rows)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlist", methods=["POST"])
+def api_add_watchlist():
+    """Add a stock ticker to the watchlist."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        ticker = data.get("ticker", "").strip()
+        if not ticker:
+            return jsonify({"error": "ticker is required"}), 400
+
+        normalized = add_watchlist_ticker(ticker)
+        return jsonify({"success": True, "ticker": normalized})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/watchlist/<ticker>", methods=["DELETE"])
+def api_remove_watchlist(ticker: str):
+    """Remove a stock ticker from the watchlist."""
+    try:
+        removed = remove_watchlist_ticker(ticker)
+        return jsonify({"success": True, "removed": removed, "ticker": ticker.strip().upper()})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -352,10 +424,15 @@ def _portfolio_summary(state: dict) -> dict:
 
 def _get_avg_buy(portfolio: dict, ticker: str) -> float:
     """Look up avg_buy for a ticker from the portfolio dict."""
+    return _get_asset_field(portfolio, ticker, "avg_buy", 0.0)
+
+
+def _get_asset_field(portfolio: dict, ticker: str, field: str, default: float) -> float:
+    """Look up a numeric asset field for a ticker from the portfolio dict."""
     for bucket, assets in portfolio.items():
         if ticker in assets:
-            return assets[ticker]["avg_buy"]
-    return 0.0
+            return assets[ticker].get(field, default)
+    return default
 
 
 # ── Entry point ──────────────────────────────────────────────────

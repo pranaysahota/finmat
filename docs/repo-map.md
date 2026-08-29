@@ -28,10 +28,13 @@ Folder-by-folder guide for future work.
 
 ## modules/
 
-- `database.py`: SQLite schema and CRUD. Modify for persistence changes.
+- `database.py`: SQLite schema and CRUD for holdings, trades, snapshots,
+  watchlist tickers, and realized profit/loss/P&L aggregation. Modify for
+  persistence changes.
 - `portfolio.py`: pure calculations and alert-rule checks. Modify carefully;
   this is financial logic.
-- `price_fetcher.py`: external market data fetches.
+- `price_fetcher.py`: external market data fetches, including Yahoo stock
+  quotes used by the watchlist.
 - `history.py`: SQLite snapshot and performance summary logic.
 - `news_sentiment.py`: news/RSS fetches and Anthropic sentiment logic.
 - `decision_engine.py`: AI-generated portfolio analysis and tax-aware prompts.
@@ -41,7 +44,8 @@ Folder-by-folder guide for future work.
 
 ## ui/
 
-- `app.py`: Flask app, REST routes, Basic Auth, trade API.
+- `app.py`: Flask app, REST routes, Basic Auth, trade API, watchlist API, and
+  dashboard portfolio response shaping.
 - `static/index.html`: current single-file frontend. Safe for UI-only changes,
   but route/API changes must be coordinated with `ui/app.py`.
 
@@ -69,6 +73,8 @@ marked with `integration`.
 
 - `architecture.md`: current architecture baseline.
 - `ops.md`: operational notes. Verify against code before following old steps.
+- `stock-analysis-evals-approach.html`: phone-readable proposal for evaluating
+  non-deterministic stock-analysis outputs.
 - `playbooks/`: mode-specific workflow guides.
 - `decisions/`: ADRs.
 - `deprecated.md`: deprecated patterns and dead-code candidates.

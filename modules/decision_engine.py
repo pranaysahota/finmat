@@ -19,9 +19,10 @@ _GEMINI_MODEL        = "gemini-3-flash-preview"
 _GEMINI_MODEL_FALLBACK = "gemini-2.5-flash"
 
 _GEMINI_ANALYSIS_SYSTEM = (
-    "You are a financial analyst producing a weekly equity review for a private "
+    "You are a financial analyst producing equity briefings for a private "
     "investor based in Ireland with a 6-12 month horizon. Ground every claim in "
-    "recent news. Be concise — 4-5 sentences per stock maximum. No fluff."
+    "recent news. Follow the requested section headings exactly for every ticker. "
+    "Be concise — 4-5 sentences per stock maximum. No fluff."
 )
 
 _GEMINI_SELL_SYSTEM = (
@@ -336,18 +337,20 @@ def get_decision(
         return _FALLBACK_DECISION
 
 
-def get_weekly_analysis(
+def get_stock_analysis(
     portfolio_state: dict,
     performance: dict,
     sentiment: dict,
     macro_sentiment: dict,
+    *,
+    briefing_mode: str = "weekly",
+    news_window_label: str = "last week",
 ) -> str:
-    """Generate a Gemini-powered per-stock weekly analysis with Google Search grounding.
+    """Generate a Gemini-powered per-stock analysis with Google Search grounding.
 
     Builds a structured prompt from portfolio_state, performance, per-ticker sentiment,
     and macro themes, then asks Gemini 3 Flash (with Google Search) to produce a
-    4-5 sentence review per holding covering: news this week, analyst consensus,
-    thesis validity, and one-sentence forward outlook.
+    structured review per stock for the requested briefing mode.
 
     Args:
         portfolio_state: Dict as returned by calculate_portfolio().
@@ -355,10 +358,15 @@ def get_weekly_analysis(
         sentiment:       Dict of {ticker: {score, label, summary}} from get_all_sentiment().
         macro_sentiment: Dict of {theme: {score, label, summary, affected_tickers}}
                          from get_macro_sentiment().
+        briefing_mode:   "daily" or "weekly"; controls required section headings.
+        news_window_label: Human-readable freshness window, e.g. "last 24 hours".
 
     Returns:
         Gemini's formatted analysis string, or a fallback message on any error.
     """
+    is_daily = briefing_mode == "daily"
+    recap_heading = "Daily Recap" if is_daily else "Weekly Recap"
+
     # Build ticker → macro themes lookup
     ticker_macro: dict[str, list[tuple[str, str, float]]] = {}
     for theme, data in macro_sentiment.items():
@@ -368,21 +376,39 @@ def get_weekly_analysis(
             )
 
     lines: list[str] = [
-        "WEEKLY PORTFOLIO REVIEW REQUEST",
+        f"{briefing_mode.upper()} STOCK ANALYSIS REQUEST",
         "",
-        "For each holding below, produce a section with 4-5 sentences covering:",
-        "  1. What happened this week (grounded in recent news — use Google Search)",
-        "  2. Current analyst consensus and any price target changes this week",
-        "  3. Whether the investment thesis still holds",
-        "  4. One sentence forward outlook for the coming week",
+        f"Use only updates from the {news_window_label}. Ground claims in recent news or Google Search.",
+        "Use exactly the requested headings for each ticker. Do not merge sections into a paragraph.",
         "",
-        "HOLDINGS:",
+        "For held Growth/portfolio positions, use exactly these headings:",
+        f"  {recap_heading}:",
+        "  Analyst Consensus:",
+        "  Investment Thesis:",
+        "  Forward Outlook:",
+        "",
+        "For Watchlist positions only, use exactly these headings:",
+        f"  {recap_heading}:",
+        "  Current Price / Analyst Target:",
+        "  Entry Watch:",
+        "  Forward Outlook:",
+        "",
+        "Watchlist instructions:",
+        "  - Mention the current price supplied below.",
+        "  - Use Google Search to find analyst consensus target price or target range.",
+        "  - Explain what analysts are saying about a good entry point.",
+        "  - Include support/resistance, pullback levels, or price action signals to watch when available.",
+        "  - Do not give HOLD/WATCH/SELL verdicts for watchlist tickers.",
+        "",
+        "STOCKS:",
     ]
 
     for ticker, holding in portfolio_state.get("holdings", {}).items():
         pnl_pct       = holding.get("pnl_pct", 0.0)
         current_value = holding.get("current_value", 0.0)
+        current_price = holding.get("current_price", 0.0)
         bucket        = holding.get("bucket", "")
+        is_watchlist  = bucket == "Watchlist"
 
         sent       = sentiment.get(ticker, {})
         sent_label = sent.get("label", "NEUTRAL")
@@ -390,7 +416,15 @@ def get_weekly_analysis(
         sent_sum   = sent.get("summary", "No sentiment data.")
 
         lines.append(f"  {ticker} ({bucket})")
-        lines.append(f"    Current value: ${current_value:,.2f}  P&L: {pnl_pct:+.2f}%")
+        lines.append(f"    Current price: ${current_price:,.2f}")
+        if is_watchlist:
+            lines.append("    Position type: Watchlist only, not currently held")
+            lines.append("    Required sections: "
+                         f"{recap_heading}, Current Price / Analyst Target, Entry Watch, Forward Outlook")
+        else:
+            lines.append(f"    Current value: ${current_value:,.2f}  P&L: {pnl_pct:+.2f}%")
+            lines.append("    Required sections: "
+                         f"{recap_heading}, Analyst Consensus, Investment Thesis, Forward Outlook")
         lines.append(f"    Sentiment: {sent_label} ({sent_score:+.2f}) — {sent_sum}")
 
         for theme, label, score in ticker_macro.get(ticker, []):
@@ -423,6 +457,23 @@ def get_weekly_analysis(
         else:
             print(f"  ⚠️  Gemini weekly analysis error: {exc}")
         return "⚠️ Gemini analysis unavailable this week."
+
+
+def get_weekly_analysis(
+    portfolio_state: dict,
+    performance: dict,
+    sentiment: dict,
+    macro_sentiment: dict,
+) -> str:
+    """Backward-compatible wrapper for weekly per-stock analysis."""
+    return get_stock_analysis(
+        portfolio_state,
+        performance,
+        sentiment,
+        macro_sentiment,
+        briefing_mode="weekly",
+        news_window_label="last week",
+    )
 
 
 def get_weekly_sell_recommendations(
