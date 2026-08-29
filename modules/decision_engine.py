@@ -161,6 +161,9 @@ def build_context(
     # ── Portfolio Snapshot ──
     lines.append("PORTFOLIO SNAPSHOT")
     lines.append(f"  Total value:   ${portfolio_state.get('total_value', 0):,.2f}")
+    if "invested_value" in portfolio_state or "cash_balance" in portfolio_state:
+        lines.append(f"  Invested value:${portfolio_state.get('invested_value', 0):,.2f}")
+        lines.append(f"  USD cash:      ${portfolio_state.get('cash_balance', 0):,.2f}")
     lines.append(f"  Total cost:    ${portfolio_state.get('total_cost', 0):,.2f}")
     lines.append(
         f"  P&L:           ${portfolio_state.get('total_pnl_usd', 0):+,.2f} "
@@ -214,7 +217,7 @@ def build_context(
     # ── Macro Themes (cross-position) ──
     lines.append("\nMACRO THEMES (cross-position)")
     if macro_sentiment:
-        total_value = portfolio_state.get("total_value", 0.0)
+        invested_value = portfolio_state.get("invested_value", portfolio_state.get("total_value", 0.0))
         holdings    = portfolio_state.get("holdings", {})
         for theme_label, theme_data in macro_sentiment.items():
             affected  = theme_data.get("affected_tickers", [])
@@ -223,14 +226,14 @@ def build_context(
                 for t in affected
                 if t in holdings
             )
-            theme_weight = (theme_val / total_value * 100) if total_value else 0.0
+            theme_weight = (theme_val / invested_value * 100) if invested_value else 0.0
             lines.append(
                 f"  {theme_label}: {theme_data.get('label')} "
                 f"({theme_data.get('score', 0.0):+.2f}) — "
                 f"affects: {', '.join(affected)}"
             )
             lines.append(f"    Summary: {theme_data.get('summary', '')}")
-            lines.append(f"    {theme_label} affects {theme_weight:.0f}% of portfolio by value")
+            lines.append(f"    {theme_label} affects {theme_weight:.0f}% of invested portfolio by value")
     else:
         lines.append("  No macro theme data available.")
 

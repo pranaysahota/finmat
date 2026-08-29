@@ -11,10 +11,13 @@ sys.path.insert(0, str(ROOT))
 import modules.database as db_mod
 from modules.database import (  # noqa: E402
     add_watchlist_ticker,
+    get_cash_balance,
     get_realized_pnl,
     get_realized_pnl_breakdown,
+    get_recent_cash_transactions,
     get_watchlist_tickers,
     init_db,
+    insert_cash_transaction,
     insert_trade,
     remove_watchlist_ticker,
 )
@@ -41,6 +44,16 @@ def _trade(trade_id: str, side: str, gross_pnl: float | None = None) -> dict:
         "new_avg_buy": 0.0 if side == "sell" else 100.0,
         "gross_pnl": gross_pnl,
         "source": "Revolut",
+    }
+
+
+def _cash_tx(tx_id: str, transaction_type: str, amount: float, timestamp: str) -> dict:
+    return {
+        "id": tx_id,
+        "timestamp": timestamp,
+        "transaction_type": transaction_type,
+        "amount": amount,
+        "note": "test cash movement",
     }
 
 
@@ -78,3 +91,43 @@ def test_realized_pnl_is_zero_without_matching_sells():
         "loss": 0.0,
         "pnl": 0.0,
     }
+
+
+def test_cash_balance_defaults_to_zero():
+    assert get_cash_balance() == 0.0
+    assert get_recent_cash_transactions() == []
+
+
+def test_cash_transactions_store_signed_amounts_and_running_balance():
+    deposit = insert_cash_transaction(
+        _cash_tx("cash-1", "deposit", 250.0, "2026-08-29T10:00:00")
+    )
+    withdrawal = insert_cash_transaction(
+        _cash_tx("cash-2", "withdrawal", 40.0, "2026-08-29T11:00:00")
+    )
+    adjustment = insert_cash_transaction(
+        _cash_tx("cash-3", "adjustment", -10.0, "2026-08-29T12:00:00")
+    )
+
+    assert deposit["amount"] == 250.0
+    assert deposit["balance_after"] == 250.0
+    assert withdrawal["amount"] == -40.0
+    assert withdrawal["balance_after"] == 210.0
+    assert adjustment["amount"] == -10.0
+    assert adjustment["balance_after"] == 200.0
+    assert get_cash_balance() == 200.0
+
+
+def test_recent_cash_transactions_are_newest_first():
+    insert_cash_transaction(_cash_tx("cash-1", "deposit", 100.0, "2026-08-29T10:00:00"))
+    insert_cash_transaction(_cash_tx("cash-2", "deposit", 25.0, "2026-08-29T12:00:00"))
+    insert_cash_transaction(_cash_tx("cash-3", "withdrawal", 10.0, "2026-08-29T11:00:00"))
+
+    rows = get_recent_cash_transactions(2)
+
+    assert [row["id"] for row in rows] == ["cash-2", "cash-3"]
+
+
+def test_cash_transaction_rejects_negative_balance():
+    with pytest.raises(ValueError, match="cannot go negative"):
+        insert_cash_transaction(_cash_tx("cash-1", "withdrawal", 1.0, "2026-08-29T10:00:00"))

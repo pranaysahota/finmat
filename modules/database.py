@@ -60,6 +60,15 @@ def init_db() -> None:
             source         TEXT NOT NULL DEFAULT 'Revolut'
         );
 
+        CREATE TABLE IF NOT EXISTS cash_transactions (
+            id               TEXT PRIMARY KEY,
+            timestamp        TEXT NOT NULL,
+            transaction_type TEXT NOT NULL CHECK(transaction_type IN ('deposit', 'withdrawal', 'adjustment')),
+            amount           REAL NOT NULL,
+            balance_after    REAL NOT NULL,
+            note             TEXT NOT NULL DEFAULT ''
+        );
+
         CREATE TABLE IF NOT EXISTS snapshots (
             date          TEXT PRIMARY KEY,
             timestamp     TEXT NOT NULL,
@@ -212,6 +221,92 @@ def get_realized_pnl_breakdown() -> dict:
         "loss": round(float(row["loss"]), 2),
         "pnl": round(float(row["pnl"]), 2),
     }
+
+
+# ── Cash Wallet CRUD ───────────────────────────────────────────
+
+VALID_CASH_TRANSACTION_TYPES = {"deposit", "withdrawal", "adjustment"}
+
+
+def get_cash_balance() -> float:
+    """Return the latest USD cash wallet balance, or 0.0 when no ledger exists."""
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT balance_after
+        FROM cash_transactions
+        ORDER BY timestamp DESC, rowid DESC
+        LIMIT 1
+    """).fetchone()
+    conn.close()
+    return round(float(row["balance_after"]), 2) if row else 0.0
+
+
+def get_recent_cash_transactions(limit: int = 5) -> list[dict]:
+    """Return recent cash wallet ledger entries, newest first."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT *
+        FROM cash_transactions
+        ORDER BY timestamp DESC, rowid DESC
+        LIMIT ?
+    """, (limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def insert_cash_transaction(transaction: dict) -> dict:
+    """Insert a manual USD cash wallet transaction and return the stored row.
+
+    Deposits are stored as positive amounts, withdrawals as negative amounts,
+    and adjustments preserve the signed amount supplied by the caller.
+    """
+    tx_type = transaction["transaction_type"]
+    if tx_type not in VALID_CASH_TRANSACTION_TYPES:
+        raise ValueError("transaction_type must be deposit, withdrawal, or adjustment")
+
+    raw_amount = float(transaction["amount"])
+    if raw_amount == 0:
+        raise ValueError("amount must be non-zero")
+
+    if tx_type == "deposit":
+        amount = abs(raw_amount)
+    elif tx_type == "withdrawal":
+        amount = -abs(raw_amount)
+    else:
+        amount = raw_amount
+
+    conn = get_connection()
+    row = conn.execute("""
+        SELECT balance_after
+        FROM cash_transactions
+        ORDER BY timestamp DESC, rowid DESC
+        LIMIT 1
+    """).fetchone()
+    current_balance = float(row["balance_after"]) if row else 0.0
+    balance_after = round(current_balance + amount, 2)
+    if balance_after < 0:
+        conn.close()
+        raise ValueError("cash balance cannot go negative")
+
+    stored = {
+        "id": transaction["id"],
+        "timestamp": transaction["timestamp"],
+        "transaction_type": tx_type,
+        "amount": round(amount, 2),
+        "balance_after": balance_after,
+        "note": transaction.get("note", ""),
+    }
+    conn.execute("""
+        INSERT INTO cash_transactions
+            (id, timestamp, transaction_type, amount, balance_after, note)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        stored["id"], stored["timestamp"], stored["transaction_type"],
+        stored["amount"], stored["balance_after"], stored["note"],
+    ))
+    conn.commit()
+    conn.close()
+    return stored
 
 
 # ── Watchlist CRUD ────────────────────────────────────────────────

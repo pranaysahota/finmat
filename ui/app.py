@@ -22,10 +22,13 @@ from flask import Flask, Response, jsonify, redirect, request, send_from_directo
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, load_portfolio
 from modules.database import (
     add_watchlist_ticker,
+    get_cash_balance,
     get_holding,
     get_realized_pnl_breakdown,
+    get_recent_cash_transactions,
     get_recent_trades,
     get_watchlist_tickers,
+    insert_cash_transaction,
     insert_trade,
     remove_watchlist_ticker,
     upsert_holding,
@@ -36,6 +39,7 @@ from trade import _calc_cgt, _normalise_ticker
 
 VALID_BUCKETS = {"Diversified", "Growth", "Crypto"}
 VALID_TYPES = {"stock", "crypto"}
+VALID_CASH_TRANSACTION_TYPES = {"deposit", "withdrawal", "adjustment"}
 
 app = Flask(__name__, static_folder="static")
 
@@ -112,6 +116,8 @@ def api_portfolio():
 
         return jsonify({
             "total_value": state["total_value"],
+            "invested_value": state["invested_value"],
+            "cash_balance": state["cash_balance"],
             "total_cost": state["total_cost"],
             "total_pnl_usd": state["total_pnl_usd"],
             "total_pnl_pct": state["total_pnl_pct"],
@@ -222,6 +228,51 @@ def api_remove_watchlist(ticker: str):
     try:
         removed = remove_watchlist_ticker(ticker)
         return jsonify({"success": True, "removed": removed, "ticker": ticker.strip().upper()})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/cash")
+def api_cash():
+    """Return current USD wallet balance and recent cash activity."""
+    try:
+        return jsonify({
+            "balance": get_cash_balance(),
+            "transactions": get_recent_cash_transactions(5),
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/cash", methods=["POST"])
+def api_add_cash_transaction():
+    """Log a manual USD wallet movement."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSON body required"}), 400
+
+        tx_type = data.get("transaction_type")
+        amount = data.get("amount")
+        note = str(data.get("note", "")).strip()
+
+        if tx_type not in VALID_CASH_TRANSACTION_TYPES:
+            return jsonify({"error": "transaction_type must be deposit, withdrawal, or adjustment"}), 400
+        if not isinstance(amount, (int, float)) or amount == 0:
+            return jsonify({"error": "amount must be a non-zero number"}), 400
+        if tx_type in ("deposit", "withdrawal") and amount <= 0:
+            return jsonify({"error": "deposit and withdrawal amounts must be positive"}), 400
+
+        transaction = insert_cash_transaction({
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "transaction_type": tx_type,
+            "amount": amount,
+            "note": note,
+        })
+        return jsonify({"success": True, "transaction": transaction, "balance": transaction["balance_after"]})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -405,13 +456,15 @@ def _load_portfolio_state() -> tuple[dict, dict]:
     """Load the portfolio and calculate its state using live prices."""
     portfolio = load_portfolio()
     prices = get_all_prices(portfolio)
-    return portfolio, calculate_portfolio(prices, portfolio)
+    return portfolio, calculate_portfolio(prices, portfolio, cash_balance=get_cash_balance())
 
 
 def _portfolio_summary(state: dict) -> dict:
     """Select the compact, API-facing subset of a portfolio state."""
     return {
         "total_value": state["total_value"],
+        "invested_value": state["invested_value"],
+        "cash_balance": state["cash_balance"],
         "total_cost": state["total_cost"],
         "total_pnl_usd": state["total_pnl_usd"],
         "total_pnl_pct": state["total_pnl_pct"],

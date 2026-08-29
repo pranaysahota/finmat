@@ -8,7 +8,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import BUCKET_TARGETS, CRYPTO_ACTIVE, PORTFOLIO, RULES
 
-def calculate_portfolio(prices: dict, portfolio: dict | None = None) -> dict:
+def calculate_portfolio(
+    prices: dict,
+    portfolio: dict | None = None,
+    cash_balance: float = 0.0,
+) -> dict:
     """Calculate the full portfolio state from holdings and live prices.
 
     Reads qty and avg_buy for every ticker from the portfolio dict,
@@ -24,6 +28,7 @@ def calculate_portfolio(prices: dict, portfolio: dict | None = None) -> dict:
                 modules.price_fetcher.get_all_prices().
         portfolio: Optional portfolio dict. Defaults to the module-level
                    PORTFOLIO for backward compatibility with main.py.
+        cash_balance: USD cash wallet balance to include in total value.
 
     Returns:
         portfolio_state dict — see CLAUDE.md for the full shape.
@@ -67,21 +72,25 @@ def calculate_portfolio(prices: dict, portfolio: dict | None = None) -> dict:
 
             bucket_values[bucket] = round(bucket_values[bucket] + current_value, 2)
 
-    total_value   = round(sum(h["current_value"] for h in holdings.values()), 2)
+    invested_value = round(sum(h["current_value"] for h in holdings.values()), 2)
+    cash_balance = round(float(cash_balance), 2)
+    total_value   = round(invested_value + cash_balance, 2)
     total_cost    = round(sum(h["cost_basis"]    for h in holdings.values()), 2)
-    total_pnl_usd = round(total_value - total_cost, 2)
+    total_pnl_usd = round(invested_value - total_cost, 2)
     total_pnl_pct = round((total_pnl_usd / total_cost) * 100, 2) if total_cost else 0.0
 
     crypto_value  = bucket_values.get("Crypto", 0.0)
-    crypto_weight = round((crypto_value / total_value) * 100, 2) if total_value else 0.0
+    crypto_weight = round((crypto_value / invested_value) * 100, 2) if invested_value else 0.0
 
     bucket_weights = {
-        bucket: round((val / total_value) * 100, 2) if total_value else 0.0
+        bucket: round((val / invested_value) * 100, 2) if invested_value else 0.0
         for bucket, val in bucket_values.items()
     }
 
     return {
         "total_value":    total_value,
+        "invested_value": invested_value,
+        "cash_balance":   cash_balance,
         "total_cost":     total_cost,
         "total_pnl_usd":  total_pnl_usd,
         "total_pnl_pct":  total_pnl_pct,

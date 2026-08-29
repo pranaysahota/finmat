@@ -21,7 +21,7 @@ from modules.alerts import (
     send_critical_alert,
     send_daily_email,
 )
-from modules.database import get_watchlist_tickers
+from modules.database import get_cash_balance, get_watchlist_tickers
 from modules.decision_engine import (
     get_stock_analysis,
     get_weekly_sell_recommendations,
@@ -84,7 +84,7 @@ def run_price_check() -> None:
 
     try:
         prices          = get_all_prices(portfolio)
-        portfolio_state = calculate_portfolio(prices)
+        portfolio_state = calculate_portfolio(prices, cash_balance=get_cash_balance())
         triggered_rules = check_rules(portfolio_state)
         bucket_drift    = check_bucket_drift(portfolio_state)
 
@@ -209,7 +209,9 @@ def _run_briefing(
 
     try:
         prices          = get_all_prices(portfolio)
-        portfolio_state = calculate_portfolio(prices, portfolio)
+        portfolio_state = calculate_portfolio(
+            prices, portfolio, cash_balance=get_cash_balance()
+        )
     except Exception as exc:
         print(f"[{ts}] Prices/portfolio FAILED: {exc}")
         portfolio_state = {}
